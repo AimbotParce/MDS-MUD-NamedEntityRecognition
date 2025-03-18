@@ -1,6 +1,7 @@
 #! /bin/bash
 
-BASEDIR=../../..
+#If you use another path you will need to change this path
+BASEDIR=../DDI
 
 # convert datasets to feature vectors
 echo "Extracting features..."
