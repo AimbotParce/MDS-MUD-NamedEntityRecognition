@@ -4,6 +4,7 @@
 
 import pycrfsuite
 
+
 class CRF:
 
     ## --------------------------------------------------
@@ -11,9 +12,9 @@ class CRF:
     ## --------------------------------------------------
     def __init__(self, datafile):
         # Create a CRF Tagger object, and load given model
-        self.tagger =  pycrfsuite.Tagger()
+        self.tagger = pycrfsuite.Tagger()
         self.tagger.open(datafile)
-        
+
     ## --------------------------------------------------
     ## predict best class for each element in xseq
     ## --------------------------------------------------

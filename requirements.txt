@@ -1,6 +1,7 @@
+nltk
+numpy
 scikit-learn
+python-crfsuite
 pandas
 matplotlib
 xml 
-nltk
-python-crfsuite
