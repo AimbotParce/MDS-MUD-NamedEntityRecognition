@@ -1,4 +1,9 @@
 *.xml
+*.feat
+*.crf
+*.out
+*.stats
+*.joblib
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

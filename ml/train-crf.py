@@ -1,47 +1,23 @@
 #!/usr/bin/env python3
 
 import sys
-from contextlib import redirect_stdout
 
 import pycrfsuite
+from src.feature_space import InstanceYielder
 
 
-def instances(fi):
-    xseq = []
-    yseq = []
-
-    for line in fi:
-        line = line.strip("\n")
-        if not line:
-            # An empty line means the end of a sentence.
-            # Return accumulated sequences, and reinitialize.
-            yield xseq, yseq
-            xseq = []
-            yseq = []
-            continue
-
-        # Split the line with TAB characters.
-        fields = line.split("\t")
-
-        # Append the item features to the item sequence.
-        # fields are:  0=sid, 1=form, 2=span_start, 3=span_end, 4=tag, 5...N = features
-        item = fields[5:]
-        xseq.append(item)
-
-        # Append the label to the label sequence.
-        yseq.append(fields[4])
-
-
-if __name__ == "__main__":
-
-    # get file where model will be written
-    modelfile = sys.argv[1]
-
+def main(model_file: str):
+    """
+    Read training instances from STDIN, and train a CRF model.
+    The model is saved to the specified file.
+    Args:
+        model_file (str): The file where the trained model will be saved.
+    """
     # Create a Trainer object.
     trainer = pycrfsuite.Trainer()
 
     # Read training instances from STDIN, and append them to the trainer.
-    for xseq, yseq in instances(sys.stdin):
+    for xseq, yseq in InstanceYielder(sys.stdin)[5:, 4]:
         trainer.append(xseq, yseq, 0)
 
     # Use L2-regularized SGD and 1st-order dyad features.
@@ -56,4 +32,16 @@ if __name__ == "__main__":
         print(name, trainer.get(name), trainer.help(name), file=sys.stderr)
 
     # Start training and dump model to modelfile
-    trainer.train(modelfile, -1)
+    trainer.train(model_file, -1)
+
+
+if __name__ == "__main__":
+    if len(sys.argv) != 2:
+        print("Usage: train-crf.py modelfile")
+        sys.exit(1)
+    model_file = sys.argv[1]
+    if not model_file:
+        print("Error: No model file specified.")
+        sys.exit(1)
+
+    main(model_file)

@@ -5,11 +5,11 @@ Tokenize sentence, returning tokens and span offsets
 import os
 import sys
 from os import listdir
-from typing import List, Tuple
+from typing import List, Tuple, TypeAlias
 from xml.dom.minidom import parse
 
+import nltk
 from nltk.tokenize import word_tokenize
-from regex import TypeAlias
 
 Token: TypeAlias = Tuple[str, int, int]
 EntitySpan: TypeAlias = Tuple[int, int, str]
@@ -151,4 +151,5 @@ if __name__ == "__main__":
         print("Cannot read directory:", datadir)
         sys.exit(1)
 
+    nltk.download("punkt_tab")  # Download the punkt tokenizer models
     main(datadir=datadir)
