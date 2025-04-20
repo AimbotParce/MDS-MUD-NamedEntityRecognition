@@ -3,7 +3,7 @@
 import sys
 
 import pycrfsuite
-from src.feature_space import InstanceYielder
+from src.feature_space import SentenceYielder
 
 
 def main(model_file: str):
@@ -17,7 +17,7 @@ def main(model_file: str):
     trainer = pycrfsuite.Trainer()
 
     # Read training instances from STDIN, and append them to the trainer.
-    for xseq, yseq in InstanceYielder(sys.stdin)[5:, 4]:
+    for xseq, yseq in SentenceYielder(sys.stdin)[5:, 4]:
         trainer.append(xseq, yseq, 0)
 
     # Use L2-regularized SGD and 1st-order dyad features.

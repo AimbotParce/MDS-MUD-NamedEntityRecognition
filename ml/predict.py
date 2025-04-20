@@ -2,13 +2,13 @@
 
 import sys
 
-from src.feature_space import InstanceYielder
+from src.feature_space import SentenceYielder
 from src.models import Model
 
 
 def main(model_file: str):
     model = Model(model_file)  # Load leaned model
-    for xseq, toks in InstanceYielder(sys.stdin)[5:, :4]:
+    for xseq, toks in SentenceYielder(sys.stdin)[5:, :4]:
         predictions = model.predict(xseq)
 
         inside = False

@@ -2,7 +2,32 @@
 from typing import Generator, List, TextIO, Tuple, overload
 
 
-class InstanceYielder:
+class SentenceYielder:
+    """
+    Yield data columns from the tokens of the sentences from a feature file.
+    The feature file is a tab-separated file with the following format:
+    sid  form  span_start  span_end  tag  feature1  feature2 ... featureN
+    Where each line represents a token in a sentence, and the sentences
+    are separated by empty lines.
+
+    This class provides a single method __getitem__ that allows you to specify
+    two slices or indices to extract from each tab-separated line of the file.
+
+    The result is a generator that, for each sentence, yields two lists:
+    - The first list contains the feature/s from the first specified column/s.
+    - The second list contains the feature/s from the second specified column/s.
+
+    Example usage:
+    ```python
+    with open("path/to/feature_file.txt", "r") as fd:
+        instance_yielder = InstanceYielder(fd)
+        for xseq, yseq in instance_yielder[0:2, 4]:
+            # Each iteration corresponds to a sentence.
+            print(xseq)  # Prints the features from columns 0 to 2
+            print(yseq)  # Prints the labels from column 4
+    ```
+    """
+
     def __init__(self, fd: TextIO):
         self.fd = fd
 
