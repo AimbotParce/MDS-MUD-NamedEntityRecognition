@@ -17,5 +17,5 @@ class CRF(ModelABC):
         self.tagger = pycrfsuite.Tagger()
         self.tagger.open(datafile)
 
-    def predict(self, xseq: List[List[str]]) -> List[List[str]]:
+    def predict(self, xseq: List[List[str]]) -> List[str]:
         return self.tagger.tag(xseq)

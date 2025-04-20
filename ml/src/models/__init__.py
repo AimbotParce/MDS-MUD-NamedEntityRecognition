@@ -9,7 +9,7 @@ class ModelABC(ABC):
     @abstractmethod
     def __init__(self, datafile: str): ...
     @abstractmethod
-    def predict(self, xseq: List[List[str]]) -> List[List[str]]: ...
+    def predict(self, xseq: List[List[str]]) -> List[str]: ...
 
     def __init_subclass__(cls) -> None:
         # Register the subclass in the global list of model classes
@@ -45,7 +45,7 @@ class Model(object):
         else:
             raise ValueError(f"Unknown model file extension: {os.path.splitext(datafile)[1]}")
 
-    def predict(self, xseq: List[List[str]]) -> List[List[str]]:
+    def predict(self, xseq: List[List[str]]) -> List[str]:
         return self._model.predict(xseq)
 
 
