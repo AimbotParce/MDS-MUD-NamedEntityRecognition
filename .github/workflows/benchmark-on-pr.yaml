@@ -41,7 +41,6 @@ jobs:
           if (!statsContent) {
             throw new Error("No stats content found!");
           }
-          const { context, github } = require('@actions/github');
           const prNumber = context.payload.pull_request.number;
           await github.rest.issues.createComment({
             owner: context.repo.owner,
