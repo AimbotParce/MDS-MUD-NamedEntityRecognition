@@ -28,14 +28,6 @@ else
     echo "Devel features already extracted. Use --features to re-extract."
 fi
 
-run_or_warn() {
-    "$@"
-    local status=$?
-    if [ $status -ne 0 ]; then
-        echo "Error with command: $*" >&2
-    fi
-    return $status
-}
 
 echo "Training CRF model..."
 python3 ml/train.py crf models/model.crf < data/train.feat
@@ -57,11 +49,11 @@ echo "Evaluating Naive Bayes results..."
 python3 ml/evaluator.py NER data/devel data/devel-NB.out > data/devel-NB.stats
 
 
-echo "Training Custom model..."
-run_or_warn python3 ml/train.py custom models/custom.joblib < data/train.feat
+# echo "Training Custom model..."
+# run_or_warn python3 ml/train.py custom models/custom.joblib < data/train.feat
 
-echo "Running Naive Bayes model..."
-run_or_warn python3 ml/predict.py custom models/custom.joblib < data/devel.feat > data/devel-custom.out
+# echo "Running Naive Bayes model..."
+# run_or_warn python3 ml/predict.py custom models/custom.joblib < data/devel.feat > data/devel-custom.out
 
-echo "Evaluating Naive Bayes results..."
-run_or_warn python3 ml/evaluator.py NER data/devel data/devel-custom.out > data/devel-custom.stats
+# echo "Evaluating Naive Bayes results..."
+# run_or_warn python3 ml/evaluator.py NER data/devel data/devel-custom.out > data/devel-custom.stats
