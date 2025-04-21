@@ -4,7 +4,7 @@ from . import ModelABC
 
 
 class CustomModel(ModelABC):
-    aliases: Tuple[str, ...] = "custom_model", "custom"  # Edit this
+    aliases = "custom"  # Edit this
 
     def __init__(self, datafile: Optional[str] = None):
         """
