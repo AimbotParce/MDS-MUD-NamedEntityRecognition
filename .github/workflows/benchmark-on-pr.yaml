@@ -31,7 +31,7 @@ jobs:
       id: read-results
       run: |
         chmod +x .github/scripts/read_stats.bash
-        .github/scripts/read_stats.bash >> $GITHUB_ENV
+        .github/scripts/read_stats.bash >> $GITHUB_OUTPUT
 
     - name: Post results as PR comment
       uses: actions/github-script@v6
@@ -50,4 +50,4 @@ jobs:
             body: `## Benchmark Results\n\`\`\`\n${statsContent}\n\`\`\``
           });
       env:
-        stats_content: ${{ env.stats_content }}
+        stats_content: ${{ steps.read-results.outputs.stats_content }}
