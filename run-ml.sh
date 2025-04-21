@@ -49,11 +49,11 @@ echo "Evaluating Naive Bayes results..."
 python3 ml/evaluator.py NER data/devel data/devel-NB.out > data/devel-NB.stats
 
 
-# echo "Training Custom model..."
-# run_or_warn python3 ml/train.py custom models/custom.joblib < data/train.feat
+echo "Training Custom model..."
+python3 ml/train.py custom models/custom.joblib < data/train.feat
 
-# echo "Running Naive Bayes model..."
-# run_or_warn python3 ml/predict.py custom models/custom.joblib < data/devel.feat > data/devel-custom.out
+echo "Running Naive Bayes model..."
+python3 ml/predict.py custom models/custom.joblib < data/devel.feat > data/devel-custom.out
 
-# echo "Evaluating Naive Bayes results..."
-# run_or_warn python3 ml/evaluator.py NER data/devel data/devel-custom.out > data/devel-custom.stats
+echo "Evaluating Naive Bayes results..."
+python3 ml/evaluator.py NER data/devel data/devel-custom.out > data/devel-custom.stats
