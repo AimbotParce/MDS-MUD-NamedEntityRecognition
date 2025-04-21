@@ -1,0 +1,43 @@
+name: Benchmark on Pull Request
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, edited]
+
+jobs:
+  run-benchmark:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+
+    - name: Run benchmark script
+      run: |
+        chmod +x run-ml.sh
+        ./run-ml.sh
+
+    
+    - name: Read benchmark results
+      id: read-results
+      run: |
+        chmod +x .github/scripts/read_stats.bash
+        .github/scripts/read_stats.bash >> $GITHUB_ENV
+
+    - name: Post results as PR comment
+      uses: actions/github-script@v6
+      with:
+        script: |
+          const statsContent = process.env.stats_content;
+          if (!statsContent) {
+            throw new Error("No stats content found!");
+          }
+          const { context, github } = require('@actions/github');
+          const prNumber = context.payload.pull_request.number;
+          await github.rest.issues.createComment({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            issue_number: prNumber,
+            body: `## Benchmark Results\n\`\`\`\n${statsContent}\n\`\`\``
+          });
+      env:
+        stats_content: ${{ env.stats_content }}
