@@ -31,13 +31,13 @@ jobs:
       id: read-results
       run: |
         chmod +x .github/scripts/read_stats.bash
-        .github/scripts/read_stats.bash >> $GITHUB_OUTPUT
+        .github/scripts/read_stats.bash > comment.txt
 
     - name: Post results as PR comment
       uses: actions/github-script@v6
       with:
         script: |
-          const statsContent = process.env.stats_content;
+          const statsContent = require('fs').readFileSync('comment.txt', 'utf8');
           if (!statsContent) {
             throw new Error("No stats content found!");
           }
@@ -49,5 +49,3 @@ jobs:
             issue_number: prNumber,
             body: `## Benchmark Results\n\`\`\`\n${statsContent}\n\`\`\``
           });
-      env:
-        stats_content: ${{ steps.read-results.outputs.stats_content }}
