@@ -28,4 +28,6 @@ class CustomModel(ModelABC):
         """
         Save the model to a file.
         """
-        pass  # Define This
+        with open(model_file, "w") as f:
+            f.write("Custom model saved.")
+        # Define This
