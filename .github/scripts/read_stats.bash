@@ -17,4 +17,4 @@ ${file_content}
 
 "
 done
-echo "stats_content=${concatenated_stats}"
+echo "${concatenated_stats}"

@@ -1,8 +1,6 @@
-nltk
-numpy
-scikit-learn
-python-crfsuite
-pandas
-matplotlib
-xml 
-tensorflow
+nltk==3.9.1
+numpy==2.1.3
+scikit-learn==1.6.1
+python-crfsuite==0.9.11
+tensorflow==2.19.0
+tqdm==4.67.1
