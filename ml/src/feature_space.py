@@ -6,7 +6,9 @@ class SentenceYielder:
     """
     Yield data columns from the tokens of the sentences from a feature file.
     The feature file is a tab-separated file with the following format:
+    ```
     sid  form  span_start  span_end  tag  feature1  feature2 ... featureN
+    ```
     Where each line represents a token in a sentence, and the sentences
     are separated by empty lines.
 
@@ -54,7 +56,9 @@ class SentenceYielder:
             if not line:
                 # An empty line means the end of a sentence.
                 # Return accumulated sequences, and reinitialize.
-                yield xseq, yseq
+                if xseq and yseq:
+                    yield xseq, yseq
+
                 xseq = []
                 yseq = []
                 continue
