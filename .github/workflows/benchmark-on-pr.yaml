@@ -2,7 +2,7 @@ name: Benchmark on Pull Request
 
 on:
   pull_request:
-    types: [opened, synchronize, reopened, edited]
+    types: [opened, synchronize]
 
 permissions:
   contents: read
@@ -47,14 +47,43 @@ jobs:
       uses: actions/github-script@v6
       with:
         script: |
-          const statsContent = require('fs').readFileSync('comment.txt', 'utf8');
+          const fs = require('fs');
+          const statsContent = fs.readFileSync('comment.txt', 'utf8');
           if (!statsContent) {
             throw new Error("No stats content found!");
           }
+
           const prNumber = context.payload.pull_request.number;
-          await github.rest.issues.createComment({
-            owner: context.repo.owner,
-            repo: context.repo.repo,
+          const owner = context.repo.owner;
+          const repo = context.repo.repo;
+          const scriptName = '${{ matrix.script }}';
+          const commentHeader = `## Benchmark Results (${scriptName})`;
+
+          // Fetch existing comments
+          const { data: comments } = await github.rest.issues.listComments({
+            owner,
+            repo,
             issue_number: prNumber,
-            body: `## Benchmark Results (${{ matrix.script }})\n\n${statsContent}\n`
+          });
+
+          // Delete previous benchmark comments for this script
+          for (const comment of comments) {
+            if (
+              comment.user.login === 'github-actions[bot]' &&
+              comment.body.startsWith(commentHeader)
+            ) {
+              await github.rest.issues.deleteComment({
+                owner,
+                repo,
+                comment_id: comment.id,
+              });
+            }
+          }
+
+          // Post new benchmark result comment
+          await github.rest.issues.createComment({
+            owner,
+            repo,
+            issue_number: prNumber,
+            body: `${commentHeader}\n\n${statsContent}\n`
           });
