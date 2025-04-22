@@ -70,10 +70,11 @@ def extract_features(tokens: List[Token]):
     # for each token, generate list of features and add it to the result
     result: List[List[str]] = []
     for k, token in enumerate(tokens):
+        word, start, end = token  # Unpack the token tuple
         features: List[str] = []
 
-        features.append("form=" + token)  # Token form
-        features.append("suf3=" + token[-3:])
+        features.append("form=" + word)  # Token form
+        features.append("suf3=" + word[-3:])
 
         if k > 0:
             tPrev = tokens[k - 1][0]
