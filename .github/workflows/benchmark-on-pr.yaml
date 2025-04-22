@@ -56,5 +56,5 @@ jobs:
             owner: context.repo.owner,
             repo: context.repo.repo,
             issue_number: prNumber,
-            body: `## Benchmark Results\n\n${statsContent}\n`
+            body: `## Benchmark Results (${{ matrix.script }})\n\n${statsContent}\n`
           });
