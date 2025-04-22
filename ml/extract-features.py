@@ -111,7 +111,7 @@ def extract_features(tokens: List[Token]):
             window_word = tokens[k + i][0]
             if i != 0:
                 features.append("window" + str(i) + "=" + window_word.lower())  # Context window features
-                features.append("window-" + str(i) + "-size=" + str(len(window_word)))  # Size of the context window
+                features.append("window" + str(i) + "-size=" + str(len(window_word)))  # Size of the context window
             if window_word[0].isupper():
                 capitalization_pattern[j] = "1"
             if window_word.isupper():
