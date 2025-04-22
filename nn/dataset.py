@@ -1,6 +1,7 @@
 from os import listdir
 from xml.dom.minidom import parse
 
+import nltk
 from nltk.tokenize import word_tokenize
 
 nltk.download("punkt_tab")
