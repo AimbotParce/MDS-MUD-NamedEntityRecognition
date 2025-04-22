@@ -10,7 +10,7 @@ permissions:
   issues: write
 
 jobs:
-  run-benchmark:
+  run-benchmark-ml:
     runs-on: ubuntu-latest
     steps:
     - name: Checkout code
@@ -31,6 +31,8 @@ jobs:
       run: |
         chmod +x run-ml.sh
         ./run-ml.sh
+        chmod +x run-nn.sh
+        ./run-nn.sh
 
     - name: Read benchmark results
       id: read-results
