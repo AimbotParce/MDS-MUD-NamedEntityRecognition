@@ -19,10 +19,10 @@ def build_network(codes):
     max_len = codes.maxlen
 
     inptW = Input(shape=(max_len,))  # word input layer & embeddings
-    embW = Embedding(input_dim=n_words, output_dim=100, input_length=max_len, mask_zero=True)(inptW)
+    embW = Embedding(input_dim=n_words, output_dim=100, input_length=max_len, mask_zero=False)(inptW)
 
     inptS = Input(shape=(max_len,))  # suf input layer & embeddings
-    embS = Embedding(input_dim=n_sufs, output_dim=50, input_length=max_len, mask_zero=True)(inptS)
+    embS = Embedding(input_dim=n_sufs, output_dim=50, input_length=max_len, mask_zero=False)(inptS)
 
     dropW = Dropout(0.1)(embW)
     dropS = Dropout(0.1)(embS)
