@@ -10,11 +10,11 @@ permissions:
   issues: write
 
 jobs:
-  run-benchmark-ml:
+  benchmark:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        script: [run-ml.sh, run-nn.sh]
+        script: [ml, nn]
 
     steps:
     - name: Checkout code
@@ -33,8 +33,9 @@ jobs:
 
     - name: Run benchmark script
       run: |
-        chmod +x ${{ matrix.script }}
-        ./${{ matrix.script }}
+        file=run-${{ matrix.script }}.sh
+        chmod +x $file
+        ./$file
 
     - name: Read benchmark results
       id: read-results
