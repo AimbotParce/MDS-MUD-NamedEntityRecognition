@@ -16,6 +16,7 @@ Token: TypeAlias = Tuple[str, int, int]
 EntitySpan: TypeAlias = Tuple[int, int, str]
 
 nltk.download("averaged_perceptron_tagger_eng")
+nltk.download("universal_tagset")
 
 
 def tokenize(txt: str):
