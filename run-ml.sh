@@ -50,10 +50,11 @@ python3 ml/evaluator.py NER data/devel data/devel-NB.out > data/devel-NB.stats
 
 
 echo "Training Custom model..."
-python3 ml/train.py custom models/custom.joblib < data/train.feat
+python3 ml/train.py custom models/custom.crf < data/train.feat
 
-echo "Running Naive Bayes model..."
-python3 ml/predict.py custom models/custom.joblib < data/devel.feat > data/devel-custom.out
+echo "Running Custom model..."
+python3 ml/predict.py custom models/custom.crf < data/devel.feat > data/devel-custom.out
 
-echo "Evaluating Naive Bayes results..."
+echo "Evaluating Custom results..."
 python3 ml/evaluator.py NER data/devel data/devel-custom.out > data/devel-custom.stats
+

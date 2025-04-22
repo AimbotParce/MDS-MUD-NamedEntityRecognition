@@ -4,3 +4,7 @@ scikit-learn==1.6.1
 python-crfsuite==0.9.11
 tensorflow==2.19.0
 tqdm==4.67.1
+xgboost==3.0.0
+catboost==1.2.8
+lightgbm==4.6.0
+optuna==4.3.0
