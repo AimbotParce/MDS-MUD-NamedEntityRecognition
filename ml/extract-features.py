@@ -69,28 +69,27 @@ def extract_features(tokens: List[Token]):
 
     # for each token, generate list of features and add it to the result
     result: List[List[str]] = []
-    for k in range(0, len(tokens)):
-        tokenFeatures: List[str] = []
-        t = tokens[k][0]
+    for k, token in enumerate(tokens):
+        features: List[str] = []
 
-        tokenFeatures.append("form=" + t)  # Token form
-        tokenFeatures.append("suf3=" + t[-3:])
+        features.append("form=" + token)  # Token form
+        features.append("suf3=" + token[-3:])
 
         if k > 0:
             tPrev = tokens[k - 1][0]
-            tokenFeatures.append("formPrev=" + tPrev)  # Token form of previous token
-            tokenFeatures.append("suf3Prev=" + tPrev[-3:])  # Suffix of previous token ???
+            features.append("formPrev=" + tPrev)  # Token form of previous token
+            features.append("suf3Prev=" + tPrev[-3:])  # Suffix of previous token ???
         else:
-            tokenFeatures.append("BoS")  # Beginning of Sentence
+            features.append("BoS")  # Beginning of Sentence
 
         if k < len(tokens) - 1:
             tNext = tokens[k + 1][0]
-            tokenFeatures.append("formNext=" + tNext)  # Token form of next token
-            tokenFeatures.append("suf3Next=" + tNext[-3:])  # Suffix of previous token ???
+            features.append("formNext=" + tNext)  # Token form of next token
+            features.append("suf3Next=" + tNext[-3:])  # Suffix of previous token ???
         else:
-            tokenFeatures.append("EoS")  # End of Sentence
+            features.append("EoS")  # End of Sentence
 
-        result.append(tokenFeatures)
+        result.append(features)
 
     return result
 
