@@ -125,8 +125,7 @@ def extract_features(tokens: List[Token]):
                 "has-hyphen": "[NA]",  # Does the token contain a hyphen?
                 "has-med-suffix": "[NA]",  # Does the token have a medical suffix?
                 "med-suffix": "[NA]",  # Medical suffix of the token
-                "has-med-form-word": "[NA]",  # Does the token have a medical form word?
-                "med-form-word": "[NA]",  # Medical form word of the token
+                "is-med-form-word": "[NA]",  # Is the token a known medical form word?
                 "length": "[NA]",  # Length of the token
                 "is-long": "[NA]",  # Is the token long?
                 "form": "[NA]",  # Form of the token
@@ -158,13 +157,11 @@ def extract_features(tokens: List[Token]):
                     neighbor_features["has-med-suffix"] = "False"
                     neighbor_features["med-suffix"] = "[NA]"
                 for form_word in drug_form_words:
-                    if neighbor_word.lower().endswith(form_word):
-                        neighbor_features["has-med-form-word"] = "True"
-                        neighbor_features["med-form-word"] = form_word
+                    if neighbor_word.lower() == form_word:
+                        neighbor_features["is-med-form-word"] = "True"
                         break
                 else:
-                    neighbor_features["has-med-form-word"] = "False"
-                    neighbor_features["med-form-word"] = "[NA]"
+                    neighbor_features["is-med-form-word"] = "False"
 
             for key, val in neighbor_features.items():
                 if i == 0:
