@@ -136,18 +136,13 @@ def extract_features(tokens: List[Token]):
             }
             if not (k + i < 0 or k + i >= len(tokens)):
                 (neighbor_word, neighbor_pos_tag) = pos_tags[k + i]
-                neighbor_features["form"] = neighbor_word
                 neighbor_features["form-lower"] = neighbor_word.lower()
                 neighbor_features["length"] = str(len(neighbor_word))
                 neighbor_features["is-long"] = str(len(neighbor_word) > 5)
-                neighbor_features["pos-tag"] = neighbor_pos_tag
                 neighbor_features["is-capitalized"] = str(neighbor_word[0].isupper())
                 neighbor_features["is-uppercase"] = str(neighbor_word.isupper())
                 neighbor_features["has-digit"] = str(any(c.isdigit() for c in neighbor_word))
-                neighbor_features["has-punct"] = str(any(c in ".,;:!?" for c in neighbor_word))
                 neighbor_features["has-hyphen"] = str("-" in neighbor_word)
-                neighbor_features["is-bos"] = str(k + i == 0)
-                neighbor_features["is-eos"] = str(k + i == len(tokens) - 1)
                 for suffix in drug_suffixes:
                     if neighbor_word.lower().endswith(suffix):
                         neighbor_features["has-med-suffix"] = "True"
@@ -163,7 +158,16 @@ def extract_features(tokens: List[Token]):
                 else:
                     neighbor_features["is-med-form-word"] = "False"
 
+                if i == 0:
+                    neighbor_features["form"] = neighbor_word
+                    neighbor_features["pos-tag"] = neighbor_pos_tag
+                    neighbor_features["has-punct"] = str(any(c in ".,;:!?" for c in neighbor_word))
+                    neighbor_features["is-bos"] = str(k + i == 0)
+                    neighbor_features["is-eos"] = str(k + i == len(tokens) - 1)
+
             for key, val in neighbor_features.items():
+                if val == "[NA]":
+                    continue
                 if i == 0:
                     features.append(f"self-{key}={val}")  # Add self features
                 else:
