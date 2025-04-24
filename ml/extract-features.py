@@ -115,7 +115,7 @@ def extract_features(tokens: List[Token]):
         features.append("self-prefix-3=" + word[0:3])
         features.append("self-prefix-4=" + word[0:4])
 
-        for j, i in enumerate(range(-2, 3)):
+        for i in range(-2, 3):
             # Add context window features
             neighbor_features = {
                 "is-capitalized": "[NA]",  # Is the first letter capitalized?
@@ -166,15 +166,15 @@ def extract_features(tokens: List[Token]):
                     neighbor_features["has-med-form-word"] = "False"
                     neighbor_features["med-form-word"] = "[NA]"
 
-            for k, v in neighbor_features.items():
+            for key, val in neighbor_features.items():
                 if i == 0:
-                    features.append(f"self-{k}={v}")  # Add self features
+                    features.append(f"self-{key}={val}")  # Add self features
                 else:
                     if i < 0:
                         ctx_i = "l" + str(-i)
                     else:
                         ctx_i = "r" + str(i)
-                    features.append(f"ctx-{ctx_i}-{k}={v}")  # Add context features
+                    features.append(f"ctx-{ctx_i}-{key}={val}")  # Add context features
 
         result.append(features)
 
