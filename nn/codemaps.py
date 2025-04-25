@@ -4,6 +4,8 @@ from typing import Optional
 
 import numpy as np
 from dataset import *
+from keras import KerasTensor
+from numpy.typing import NDArray
 from tensorflow.keras.preprocessing.sequence import pad_sequences
 
 
@@ -113,7 +115,7 @@ class Codemaps:
         return self.label_index.get(label, self.label_index["UNK"])
 
     ## --------- encode X from given data -----------
-    def encode_words(self, data: Dataset):
+    def encode_words(self, data: Dataset) -> List[NDArray[np.int32], NDArray[np.int32]]:
         # encode and pad sentence words
         Xw = [[self._encode_word(token["form"]) for token in sentence] for sentence in data.sentences()]
         Xw = pad_sequences(maxlen=self.maxlen, sequences=Xw, padding="post", value=self.word_index["PAD"])
@@ -127,7 +129,7 @@ class Codemaps:
         return [Xw, Xs]
 
     ## --------- encode Y from given data -----------
-    def encode_labels(self, data):
+    def encode_labels(self, data: Dataset) -> NDArray[np.int32]:
         # encode and pad sentence labels
         Y = [[self._encode_label(token["tag"]) for token in sentence] for sentence in data.sentences()]
         Y = pad_sequences(maxlen=self.maxlen, sequences=Y, padding="post", value=self.label_index["PAD"])
