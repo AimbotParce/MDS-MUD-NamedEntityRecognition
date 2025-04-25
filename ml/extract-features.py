@@ -4,12 +4,15 @@ Tokenize sentence, returning tokens and span offsets
 """
 import os
 import sys
+from collections import defaultdict
 from os import listdir
-from typing import List, Tuple, TypeAlias
+from pathlib import Path
+from typing import Any, Dict, List, Tuple, TypeAlias
 from xml.dom.minidom import parse
 
 import nltk
 import nltk.tag
+import numpy as np
 from nltk.tokenize import word_tokenize
 
 Token: TypeAlias = Tuple[str, int, int]
@@ -17,6 +20,33 @@ EntitySpan: TypeAlias = Tuple[int, int, str]
 
 nltk.download("averaged_perceptron_tagger_eng")
 nltk.download("universal_tagset")
+
+
+def read_list(filename: str) -> List[str]:
+    """
+    Read a list of strings from a file, stripping whitespace and newlines.
+    Args:
+        filename (str): The name of the file to read.
+    Returns:
+        List[str]: A list of strings read from the file.
+    """
+    with open(filename, "r") as f:
+        return list(line.strip() for line in f.readlines())
+
+
+def data_path(filename: str) -> Path:
+    """
+    Get the absolute path of a file in the data directory.
+    Args:
+        filename (str): The name of the file.
+    Returns:
+        file_path (Path): The absolute path of the file.
+    """
+    return (Path(__file__).parent.parent / "data" / filename).resolve()
+
+
+drug_suffixes = read_list(data_path("med-suffixes.txt"))  # Read drug suffixes from a file
+drug_form_words = read_list(data_path("med-form-words.txt"))  # Read drug form words from a file
 
 
 def tokenize(txt: str):
@@ -76,57 +106,66 @@ def extract_features(tokens: List[Token]):
     pos_tags = nltk.tag.pos_tag([t[0] for t in tokens], tagset="universal")  # Get POS tags for the tokens
     assert len(tokens) == len(pos_tags), "Mismatch between tokens and POS tags length"
     for k, (word, pos_tag) in enumerate(pos_tags):
-        features: List[str] = []
+        features: Dict[str, str] = {}
 
-        features.append("form=" + word)  # Token form
-        features.append("suf4=" + word[-3:])
-        features.append("suf3=" + word[-3:])
-        features.append("suf2=" + word[-2:])
-        features.append("suf1=" + word[-1:])
-        features.append("pre1=" + word[0:1])
-        features.append("pre2=" + word[0:2])
-        features.append("pre3=" + word[0:3])
-        features.append("pre4=" + word[0:4])
-        features.append("capitalized=" + str(word[0].isupper()))  # Is the first letter capitalized?
-        features.append("uppercase=" + str(word.isupper()))  # Is the token all uppercase?
-        features.append("hasdigit=" + str(any(c.isdigit() for c in word)))  # Does the token contain a digit?
-        features.append("haspunct=" + str(any(c in ".,;:!?" for c in word)))  # Does the token contain punctuation?
-        features.append("hashyphen=" + str("-" in word))  # Does the token contain a hyphen?
-        features.append("length=" + str(len(word)))  # Length of the token
-        features.append("form_lower=" + word.lower())  # Lowercase form of the token
-        features.append("pos_tag=" + pos_tag)  # POS tag of the token
+        features["form"] = word  # Token form
+        features["form-lower"] = word.lower()  # Lowercase form of the token
+        features["is-capitalized"] = str(word[0].isupper())  # Is the first letter capitalized?
+        features["is-uppercase"] = str(word.isupper())  # Is the token all uppercase?
+        features["has-digit"] = str(any(c.isdigit() for c in word))  # Does the token contain a digit?
+        features["has-punct"] = str(any(c in ".,;:!?" for c in word))  # Does the token contain punctuation?
+        features["has-hyphen"] = str("-" in word)  # Does the token contain a hyphen?
+        features["length"] = str(len(word))  # Length of the token
+        features["is-long"] = str(len(word) > 5)  # Is the token long?
+        features["pos-tag"] = pos_tag  # POS tag of the token
+        features["is-bos"] = str(k == 0)  # Is the token at the beginning of the sentence?
+        features["is-eos"] = str(k == len(tokens) - 1)  # Is the token at the end of the sentence?
 
-        if k == 0:
-            features.append("BoS")
-        if k == len(tokens) - 1:
-            features.append("EoS")
+        for suffix in drug_suffixes:
+            if word.lower().endswith(suffix):
+                features["has-med-suffix"] = "True"
+                features["med-suffix"] = suffix
+                break
+        else:
+            features["has-med-suffix"] = "False"
+            features["med-suffix"] = "[NA]"
+        for form_word in drug_form_words:
+            if word.lower() == form_word:
+                features["is-med-form-word"] = "True"
+                break
+        else:
+            features["is-med-form-word"] = "False"
 
-        capitalization_pattern = ["0"] * 5  # Initialize capitalization pattern
-        uppercase_pattern = ["0"] * 5  # Initialize uppercase pattern
-        hasdigit_pattern = ["0"] * 5  # Initialize digit pattern
-        hashyphen_pattern = ["0"] * 5  # Initialize hyphen pattern
-        for j, i in enumerate(range(-2, 3)):
+        # Context window features
+        context_size = 5
+        context_info = defaultdict(lambda: np.zeros(context_size, dtype=np.bool))
+        for j, i in enumerate(range(-(context_size // 2), context_size - (context_size // 2))):
             if k + i < 0 or k + i >= len(tokens):
+                # If this is outside the sentence
                 continue
-            window_word = tokens[k + i][0]
+            context_word = tokens[k + i][0]
             if i != 0:
-                features.append("window" + str(i) + "=" + window_word.lower())  # Context window features
-                features.append("window" + str(i) + "-size=" + str(len(window_word)))  # Size of the context window
-            if window_word[0].isupper():
-                capitalization_pattern[j] = "1"
-            if window_word.isupper():
-                uppercase_pattern[j] = "1"
-            if any(c.isdigit() for c in window_word):
-                hasdigit_pattern[j] = "1"
-            if "-" in window_word:
-                hashyphen_pattern[j] = "1"
+                context_word_features: Dict[str, str] = {}
+                context_word_features["form-lower"] = context_word.lower()
+                context_word_features["length"] = str(len(context_word))
+                for key, val in context_word_features.items():
+                    # Adds features like "ctx-l2-length=12", meaning "length of word two to the left is 12"
+                    ctx_i = f"r{i}" if i > 0 else f"l{-i}"
+                    features[f"ctx-{ctx_i}-{key}"] = val
 
-        features.append("neigh-capitalization=" + "".join(capitalization_pattern))  # Capitalization pattern
-        features.append("neigh-uppercase=" + "".join(uppercase_pattern))  # Uppercase pattern
-        features.append("neigh-hasdigit=" + "".join(hasdigit_pattern))  # Digit pattern
-        features.append("neigh-hashyphen=" + "".join(hashyphen_pattern))  # Hyphen pattern
+            if context_word[0].isupper():
+                context_info["is-capitalized"][j] = True
+            if context_word.isupper():
+                context_info["is-uppercase"][j] = True
+            if any(c.isdigit() for c in context_word):
+                context_info["has-digit"][j] = True
+            if "-" in context_word:
+                context_info["has-hyphen"][j] = True
 
-        result.append(features)
+        for key, vals in context_info.items():
+            features[f"ctx-{key}"] = "".join("1" if v else "0" for v in vals)
+
+        result.append(list(f"{key}={val}" for key, val in features.items()))
 
     return result
 
