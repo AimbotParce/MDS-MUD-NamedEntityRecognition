@@ -105,52 +105,51 @@ def build_network(codes: Codemaps, class_weights: Dict[int, float]) -> Model:
     return model
 
 
-## --------- MAIN PROGRAM -----------
-## --
-## -- Usage:  train.py ../data/Train ../data/Devel  modelname
-## --
+if __name__ == "__main__":
+    ## --------- MAIN PROGRAM -----------
+    ## --
+    ## -- Usage:  train.py ../data/Train ../data/Devel  modelname
+    ## --
 
-# directory with files to process
-traindir = sys.argv[1]
-validationdir = sys.argv[2]
-modelname = sys.argv[3]
+    # directory with files to process
+    traindir = sys.argv[1]
+    validationdir = sys.argv[2]
+    modelname = sys.argv[3]
 
-# load train and validation data
-traindata = Dataset(traindir)
-valdata = Dataset(validationdir)
+    # load train and validation data
+    traindata = Dataset(traindir)
+    valdata = Dataset(validationdir)
 
-# create indexes from training data
-max_len = 150
-suf_len = 5
-codes = Codemaps(traindata, max_len, suf_len)
+    # create indexes from training data
+    max_len = 150
+    suf_len = 5
+    codes = Codemaps(traindata, max_len, suf_len)
 
+    class_weights = {}
+    min_class_count = min(codes.class_counts.values())
+    print("Class Counts -> Weights:", file=sys.stderr)
+    for i, label in enumerate(codes.label_index):
+        if label in ["PAD", "UNK"]:
+            class_weights[i] = 1.0
+        else:
+            class_weights[i] = min_class_count / codes.class_counts[label]
+        print(f"  {label}: {codes.class_counts.get(label, "NA")} -> {class_weights[i]}", file=sys.stderr)
 
-class_weights = {}
-min_class_count = min(codes.class_counts.values())
-print("Class Counts -> Weights:", file=sys.stderr)
-for i, label in enumerate(codes.label_index):
-    if label in ["PAD", "UNK"]:
-        class_weights[i] = 1.0
-    else:
-        class_weights[i] = min_class_count / codes.class_counts[label]
-    print(f"  {label}: {codes.class_counts.get(label, "NA")} -> {class_weights[i]}", file=sys.stderr)
+    # build network
+    model = build_network(codes, class_weights)
+    with redirect_stdout(sys.stderr):
+        model.summary()
 
-# build network
-model = build_network(codes, class_weights)
-with redirect_stdout(sys.stderr):
-    model.summary()
+    # encode datasets
+    Xt = codes.encode_words(traindata)
+    Yt = codes.encode_labels(traindata)
+    Xv = codes.encode_words(valdata)
+    Yv = codes.encode_labels(valdata)
 
-# encode datasets
-Xt = codes.encode_words(traindata)
-Yt = codes.encode_labels(traindata)
-Xv = codes.encode_words(valdata)
-Yv = codes.encode_labels(valdata)
+    # train model
+    with redirect_stdout(sys.stderr):
+        model.fit(Xt, Yt, batch_size=32, epochs=10, validation_data=(Xv, Yv), verbose=1, class_weight=class_weights)
 
-
-# train model
-with redirect_stdout(sys.stderr):
-    model.fit(Xt, Yt, batch_size=32, epochs=10, validation_data=(Xv, Yv), verbose=1, class_weight=class_weights)
-
-# save model and indexs
-model.save(modelname)
-codes.save(modelname)
+    # save model and indexs
+    model.save(modelname)
+    codes.save(modelname)
