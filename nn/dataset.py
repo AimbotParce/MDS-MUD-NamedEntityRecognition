@@ -29,7 +29,7 @@ class Dataset:
     #  Parse all XML files in given dir, and load a list of sentences.
     #  Each sentence is a list of tuples (word, start, end, tag)
     def __init__(self, datadir):
-        self.data: Dict[str, TaggedTokenDict] = {}
+        self.data: Dict[str, List[TaggedTokenDict]] = {}
         # process each file in directory
         for f in os.listdir(datadir):
 
