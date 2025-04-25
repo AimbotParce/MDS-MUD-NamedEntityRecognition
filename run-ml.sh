@@ -29,14 +29,14 @@ else
 fi
 
 
-echo "Training CRF model..."
-python3 ml/train.py crf models/model.crf < data/train.feat
+# echo "Training CRF model..."
+# python3 ml/train.py crf models/model.crf < data/train.feat
 
-echo "Running CRF model..."
-python3 ml/predict.py crf models/model.crf < data/devel.feat > data/devel-CRF.out
+# echo "Running CRF model..."
+# python3 ml/predict.py crf models/model.crf < data/devel.feat > data/devel-CRF.out
 
-echo "Evaluating CRF results..."
-python3 ml/evaluator.py NER data/devel data/devel-CRF.out > data/devel-CRF.stats
+# echo "Evaluating CRF results..."
+# python3 ml/evaluator.py NER data/devel data/devel-CRF.out > data/devel-CRF.stats
 
 
 echo "Training Naive Bayes model..."

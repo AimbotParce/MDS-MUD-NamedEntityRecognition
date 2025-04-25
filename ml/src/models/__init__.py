@@ -1,17 +1,20 @@
 import os
 from abc import ABC, abstractmethod
-from typing import Dict, List, Optional, Tuple, Type
+from typing import Dict, List, Optional, Tuple, Type, Union
 
 
 class ModelABC(ABC):
-    aliases: Tuple[str, ...] | str | List[str] = []
+    aliases: Union[Tuple[str, ...], str, List[str]] = []
 
     @abstractmethod
     def __init__(self, datafile: Optional[str] = None): ...
+    
     @abstractmethod
     def predict(self, xseq: List[List[str]]) -> List[str]: ...
+    
     @abstractmethod
     def fit(self, xseq: List[List[str]], yseq: List[str], classes: Optional[List[str]] = None, **kwargs) -> None: ...
+    
     @abstractmethod
     def save(self, model_file: str) -> None: ...
 
@@ -62,7 +65,7 @@ def load_model(datafile: Optional[str] = None, model_type: Optional[str] = None)
         for cls in set(MODEL_CLASSES.values()):
             try:
                 loaded_model = cls(datafile)
-            except:
+            except Exception:
                 pass
             else:
                 return loaded_model
@@ -70,6 +73,7 @@ def load_model(datafile: Optional[str] = None, model_type: Optional[str] = None)
             raise ValueError(f"Unable to load model from file {datafile}. No matching model class found.")
 
 
+# Assuming these modules exist and are in the same package:
 from .CRF import CRF
 from .custom import CustomModel
 from .multinomial_nb import MultinomialNB

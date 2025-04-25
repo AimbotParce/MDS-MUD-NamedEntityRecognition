@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-from typing import Generator, List, TextIO, Tuple, overload
+from typing import Generator, List, TextIO, Tuple, overload, Union
 
 
 class SentenceYielder:
@@ -22,7 +22,7 @@ class SentenceYielder:
     Example usage:
     ```python
     with open("path/to/feature_file.txt", "r") as fd:
-        instance_yielder = InstanceYielder(fd)
+        instance_yielder = SentenceYielder(fd)
         for xseq, yseq in instance_yielder[0:2, 4]:
             # Each iteration corresponds to a sentence.
             print(xseq)  # Prints the features from columns 0 to 2
@@ -45,8 +45,8 @@ class SentenceYielder:
     def __getitem__(self, indices: Tuple[slice, int]) -> Generator[Tuple[List[List[str]], List[str]], None, None]: ...
 
     def __getitem__(
-        self, indices: Tuple[int | slice, int | slice]
-    ) -> Generator[Tuple[List[List[str]] | List[str], List[List[str]] | List[str]], None, None]:
+        self, indices: Tuple[Union[int, slice], Union[int, slice]]
+    ) -> Generator[Tuple[Union[List[List[str]], List[str]], Union[List[List[str]], List[str]]], None, None]:
         xslices, yslices = indices
         xseq = []
         yseq = []
@@ -69,4 +69,4 @@ class SentenceYielder:
             # Append the item features to the item sequence.
             # fields are:  0=sid, 1=form, 2=span_start, 3=span_end, 4=tag, 5...N = features
             xseq.append(fields[xslices])
-            yseq.append(fields[yslices])  # Append the label to the label sequence.
+            yseq.append(fields[yslices])
