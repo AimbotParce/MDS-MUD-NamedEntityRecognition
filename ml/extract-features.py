@@ -23,6 +23,7 @@ EntitySpan: TypeAlias = Tuple[int, int, str]
 nltk.download("averaged_perceptron_tagger_eng")
 nltk.download("universal_tagset")
 nltk.download("stopwords")
+nltk.download("punkt_tab")  # Download the punkt tokenizer models
 
 
 def read_list(filename: str) -> Generator[str, None, None]:
