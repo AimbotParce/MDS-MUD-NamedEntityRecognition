@@ -3,16 +3,18 @@
 Tokenize sentence, returning tokens and span offsets
 """
 import os
+import re
 import sys
 from collections import defaultdict
 from os import listdir
 from pathlib import Path
-from typing import Any, Dict, List, Tuple, TypeAlias
+from typing import Any, Dict, Generator, List, Tuple, TypeAlias
 from xml.dom.minidom import parse
 
 import nltk
 import nltk.tag
 import numpy as np
+from nltk.corpus import stopwords
 from nltk.tokenize import word_tokenize
 
 Token: TypeAlias = Tuple[str, int, int]
@@ -20,9 +22,10 @@ EntitySpan: TypeAlias = Tuple[int, int, str]
 
 nltk.download("averaged_perceptron_tagger_eng")
 nltk.download("universal_tagset")
+nltk.download("stopwords")
 
 
-def read_list(filename: str) -> List[str]:
+def read_list(filename: str) -> Generator[str, None, None]:
     """
     Read a list of strings from a file, stripping whitespace and newlines.
     Args:
@@ -31,7 +34,7 @@ def read_list(filename: str) -> List[str]:
         List[str]: A list of strings read from the file.
     """
     with open(filename, "r") as f:
-        return list(line.strip() for line in f.readlines())
+        return (line.strip() for line in f.readlines())
 
 
 def data_path(filename: str) -> Path:
@@ -45,8 +48,34 @@ def data_path(filename: str) -> Path:
     return (Path(__file__).parent.parent / "data" / filename).resolve()
 
 
-drug_suffixes = read_list(data_path("med-suffixes.txt"))  # Read drug suffixes from a file
-drug_form_words = read_list(data_path("med-form-words.txt"))  # Read drug form words from a file
+stopwords = set(stopwords.words("english"))  # Get English stop words from nltk
+
+drug_suffixes = list(read_list(data_path("med-suffixes.txt")))  # Read drug suffixes from a file
+drug_form_words = list(read_list(data_path("med-form-words.txt")))  # Read drug form words from a file
+# Read hazardous substances from a file and convert them into a set of strings for faster lookup
+hazardous_substances = set[str]()
+for sentence in read_list(data_path("hazardous-substances.txt")):
+    # Remove stop words
+    for word in nltk.tokenize.word_tokenize(sentence):
+        # Note: Keep in mind that each line may contain words that are not actually
+        # hazardous substances, so let's remove stop words with nltk
+        if word.lower() not in stopwords:
+            hazardous_substances.add(word.lower())
+
+
+word_drug_pattern = re.compile(r"\b(?=\w*[A-Za-z])\w+\b")  # All alphanumeric words (except only digits)
+drug_categories: defaultdict[str, set[str]] = defaultdict(set)
+
+for line in read_list(data_path("drugs.txt")):
+    # This file is a bit different. It contains technical terms for drugs, as well
+    # as their categorization, separated by "|"
+    drug, tag = line.split("|")
+    # Extract all alphanumeric words from the drug name
+    for word in word_drug_pattern.findall(drug):
+        # Add the word to the set of drug words for the corresponding tag
+        if len(word) < 3:  # Ignore words with less than 3 characters
+            continue
+        drug_categories[tag].add(word.lower())
 
 
 def tokenize(txt: str):
@@ -100,7 +129,6 @@ def extract_features(tokens: List[Token]):
         List[List[str]]: A list of lists, where each inner list contains
                          features for the corresponding token.
     """
-
     # for each token, generate list of features and add it to the result
     result: List[List[str]] = []
     pos_tags = nltk.tag.pos_tag([t[0] for t in tokens], tagset="universal")  # Get POS tags for the tokens
@@ -120,6 +148,16 @@ def extract_features(tokens: List[Token]):
         features["pos-tag"] = pos_tag  # POS tag of the token
         features["is-bos"] = str(k == 0)  # Is the token at the beginning of the sentence?
         features["is-eos"] = str(k == len(tokens) - 1)  # Is the token at the end of the sentence?
+        features["is-stopword"] = str(word.lower() in stopwords)  # Is the token a stop word?
+        features["is-hazardous"] = str(word.lower() in hazardous_substances)  # Is the token a hazardous substance?
+
+        features["is-drug"] = "False"
+        features["drug-type"] = "[NA]"
+        for tag, drug_words in drug_categories.items():
+            if word in drug_words:
+                features["is-drug"] = "True"
+                features["drug-type"] = tag
+                break
 
         for suffix in drug_suffixes:
             if word.lower().endswith(suffix):
