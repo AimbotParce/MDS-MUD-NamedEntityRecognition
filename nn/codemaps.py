@@ -1,6 +1,7 @@
 import json
 import re
 import string
+from collections import defaultdict
 from pathlib import Path
 from typing import Optional
 
@@ -28,6 +29,8 @@ class Codemaps:
         self.label_index: dict[str, int]
         self.maxlen: int
         self.suflen: int
+        self.class_counts: dict[str, int]
+        self.pos_tag_index: dict[str, int]
 
         if isinstance(data, Dataset) and maxlen is not None and suflen is not None:
             self.__create_indexes(data, maxlen, suflen)
@@ -49,12 +52,16 @@ class Codemaps:
         lowercase_words = set[str]()
         suffixes = set[str]()
         labels = set[str]()
+        class_counts: defaultdict[str, int] = defaultdict(int)
 
         for sentence_tokens in data.sentences():
             for tagged_token in sentence_tokens:
                 words.add(tagged_token["lc_form"])
                 suffixes.add(tagged_token["lc_form"][-self.suflen :])
                 labels.add(tagged_token["tag"])
+                class_counts[tagged_token["tag"]] += 1
+
+        self.class_counts = dict(class_counts)
 
         self.word_index = {w: i + 2 for i, w in enumerate(list(words))}
         self.word_index["PAD"] = 0  # Padding
@@ -77,6 +84,7 @@ class Codemaps:
         self.word_index = {}
         self.suf_index = {}
         self.label_index = {}
+        self.class_counts: Dict[str, int] = {}
 
         with open(name + ".idx") as f:
             for line in f.readlines():
@@ -91,6 +99,8 @@ class Codemaps:
                     self.suf_index[k] = int(i)
                 elif t == "LABEL":
                     self.label_index[k] = int(i)
+                elif t == "COUNT":
+                    self.class_counts[k] = int(i)
 
         # Add universal PoS tags
         self.pos_tag_index: Dict[str, int] = json.loads(data_file("universal-pos-tags.json").read_text())
@@ -107,6 +117,8 @@ class Codemaps:
                 print("WORD", key, self.word_index[key], file=f)
             for key in self.suf_index:
                 print("SUF", key, self.suf_index[key], file=f)
+            for key in self.class_counts:
+                print("COUNT", key, self.class_counts[key], file=f)
 
     def _encode_word(self, word: str) -> int:
         """

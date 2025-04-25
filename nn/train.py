@@ -3,6 +3,7 @@
 import sys
 from contextlib import redirect_stdout
 
+import tensorflow as tf
 from codemaps import *
 from dataset import *
 from keras import Input
@@ -10,7 +11,28 @@ from keras.layers import LSTM, Bidirectional, Dense, Dropout, Embedding, Reshape
 from keras.models import Model
 
 
-def build_network(codes: Codemaps) -> Model:
+def weighted_sparse_categorical_crossentropy(class_weights: dict[int, float]):
+    """
+    Custom loss function to handle class imbalance.
+    """
+    max_class = max(class_weights.keys())
+    cw_tensor = tf.constant(list(class_weights[k] for k in range(max_class + 1)), dtype=tf.float32)
+
+    def loss(y_true: KerasTensor, y_pred: KerasTensor) -> KerasTensor:
+        # Convert y_true to int32
+        y_true = tf.cast(y_true, tf.int32)
+        # Get the class weights for the true labels
+        weights = tf.gather(cw_tensor, y_true)
+        # Compute the sparse categorical crossentropy loss
+        loss = tf.keras.losses.sparse_categorical_crossentropy(y_true, y_pred)
+        # Multiply the loss by the class weights
+        weighted_loss = loss * weights
+        return tf.reduce_mean(weighted_loss)
+
+    return loss
+
+
+def build_network(codes: Codemaps, class_weights: Dict[int, float]) -> Model:
 
     # sizes
     n_words = codes.get_n_words()
@@ -78,7 +100,7 @@ def build_network(codes: Codemaps) -> Model:
 
     # build and compile model
     model = Model([input_words, input_suffixes, input_pos, input_length], x)
-    model.compile(optimizer="adam", loss="sparse_categorical_crossentropy", metrics=["accuracy"])
+    model.compile(optimizer="adam", loss=weighted_sparse_categorical_crossentropy(class_weights), metrics=["accuracy"])
 
     return model
 
@@ -102,8 +124,19 @@ max_len = 150
 suf_len = 5
 codes = Codemaps(traindata, max_len, suf_len)
 
+
+class_weights = {}
+min_class_count = min(codes.class_counts.values())
+print("Class Counts -> Weights:", file=sys.stderr)
+for i, label in enumerate(codes.label_index):
+    if label in ["PAD", "UNK"]:
+        class_weights[i] = 1.0
+    else:
+        class_weights[i] = min_class_count / codes.class_counts[label]
+    print(f"  {label}: {codes.class_counts.get(label, "NA")} -> {class_weights[i]}", file=sys.stderr)
+
 # build network
-model = build_network(codes)
+model = build_network(codes, class_weights)
 with redirect_stdout(sys.stderr):
     model.summary()
 
@@ -113,9 +146,10 @@ Yt = codes.encode_labels(traindata)
 Xv = codes.encode_words(valdata)
 Yv = codes.encode_labels(valdata)
 
+
 # train model
 with redirect_stdout(sys.stderr):
-    model.fit(Xt, Yt, batch_size=32, epochs=10, validation_data=(Xv, Yv), verbose=1)
+    model.fit(Xt, Yt, batch_size=32, epochs=10, validation_data=(Xv, Yv), verbose=1, class_weight=class_weights)
 
 # save model and indexs
 model.save(modelname)
