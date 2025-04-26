@@ -57,7 +57,7 @@ fname = sys.argv[1]
 datadir = sys.argv[2]
 outfile = sys.argv[3]
 
-model = load_model(fname)
+model = load_model(fname, compile=False)
 codes = Codemaps(fname)
 
 testdata = Dataset(datadir)
