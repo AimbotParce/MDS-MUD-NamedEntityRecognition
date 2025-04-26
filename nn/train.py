@@ -148,7 +148,7 @@ if __name__ == "__main__":
 
     # train model
     with redirect_stdout(sys.stderr):
-        model.fit(Xt, Yt, batch_size=32, epochs=10, validation_data=(Xv, Yv), verbose=1, class_weight=class_weights)
+        model.fit(Xt, Yt, batch_size=32, epochs=10, validation_data=(Xv, Yv), verbose=1)
 
     # save model and indexs
     model.save(modelname)
