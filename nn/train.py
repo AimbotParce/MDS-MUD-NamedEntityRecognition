@@ -3,6 +3,7 @@
 import sys
 from contextlib import redirect_stdout
 
+import keras.losses
 import tensorflow as tf
 from codemaps import *
 from dataset import *
@@ -18,16 +19,15 @@ def weighted_sparse_categorical_crossentropy(class_weights: dict[int, float]):
     max_class = max(class_weights.keys())
     cw_tensor = tf.constant(list(class_weights[k] for k in range(max_class + 1)), dtype=tf.float32)
 
-    def loss(y_true: KerasTensor, y_pred: KerasTensor) -> KerasTensor:
-        # Convert y_true to int32
-        y_true = tf.cast(y_true, tf.int32)
-        # Get the class weights for the true labels
+    def loss(y_true, y_pred):
+        # Compute the losses for all the predictions
+        loss = keras.losses.sparse_categorical_crossentropy(y_true, y_pred)
+        # Shape: (batch_size, max_len)
+        # Compute the class weights
         weights = tf.gather(cw_tensor, y_true)
-        # Compute the sparse categorical crossentropy loss
-        loss = tf.keras.losses.sparse_categorical_crossentropy(y_true, y_pred)
         # Multiply the loss by the class weights
-        weighted_loss = loss * weights
-        return tf.reduce_mean(weighted_loss)
+        loss = loss * weights
+        return tf.reduce_mean(loss, axis=-1)
 
     return loss
 
@@ -130,6 +130,7 @@ if __name__ == "__main__":
             class_weights[i] = 1.0
         else:
             class_weights[i] = min_class_count / codes.class_counts[label]
+        # class_weights[i] = 1.0
         print(f"  {label}: {codes.class_counts.get(label, "NA")} -> {class_weights[i]}", file=sys.stderr)
 
     # build network
