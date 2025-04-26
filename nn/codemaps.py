@@ -23,11 +23,12 @@ class Codemaps:
     # --- loading codemaps from given file
     def __init__(self, data: Dataset | str, maxlen: Optional[int] = None, suflen: Optional[int] = None):
 
-        self.word_index: dict[str, int]
-        self.suf_index: dict[str, int]
-        self.label_index: dict[str, int]
+        self.word_index: Dict[str, int]
+        self.suf_index: Dict[str, int]
+        self.label_index: Dict[str, int]
         self.maxlen: int
         self.suflen: int
+        self.pos_tag_index: Dict[str, int]
 
         if isinstance(data, Dataset) and maxlen is not None and suflen is not None:
             self.__create_indexes(data, maxlen, suflen)
