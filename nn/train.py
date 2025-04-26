@@ -32,8 +32,7 @@ def weighted_sparse_categorical_crossentropy(class_weights: dict[int, float]):
     return loss
 
 
-def build_network(codes: Codemaps, class_weights: Dict[int, float]) -> Model:
-
+def build_network(codes: Codemaps) -> Model:
     # sizes
     n_words = codes.get_n_words()
     n_sufs = codes.get_n_sufs()
@@ -100,8 +99,6 @@ def build_network(codes: Codemaps, class_weights: Dict[int, float]) -> Model:
 
     # build and compile model
     model = Model([input_words, input_suffixes, input_pos, input_length], x)
-    model.compile(optimizer="adam", loss=weighted_sparse_categorical_crossentropy(class_weights), metrics=["accuracy"])
-
     return model
 
 
@@ -136,9 +133,11 @@ if __name__ == "__main__":
         print(f"  {label}: {codes.class_counts.get(label, "NA")} -> {class_weights[i]}", file=sys.stderr)
 
     # build network
-    model = build_network(codes, class_weights)
+    model = build_network(codes)
     with redirect_stdout(sys.stderr):
         model.summary()
+
+    model.compile(optimizer="adam", loss=weighted_sparse_categorical_crossentropy(class_weights), metrics=["accuracy"])
 
     # encode datasets
     Xt = codes.encode_words(traindata)
