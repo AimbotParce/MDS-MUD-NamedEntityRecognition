@@ -83,6 +83,7 @@ class Codemaps:
         self.word_index = {}
         self.suf_index = {}
         self.label_index = {}
+        self.pos_tag_index = {}
 
         with open(name + ".idx") as f:
             for line in f.readlines():
