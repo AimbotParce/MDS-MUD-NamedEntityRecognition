@@ -17,8 +17,6 @@ import numpy as np
 from nltk.corpus import stopwords  # type: ignore
 from nltk.tokenize import word_tokenize  # type: ignore
 
-from chemdataextractor.nlp.tokenize import ChemWordTokenizer  # type: ignore
-
 Token: TypeAlias = Tuple[str, int, int]
 EntitySpan: TypeAlias = Tuple[int, int, str]
 
@@ -26,8 +24,6 @@ nltk.download("averaged_perceptron_tagger_eng")
 nltk.download("universal_tagset")
 nltk.download("stopwords")
 nltk.download("punkt_tab")  # Download the punkt tokenizer models
-
-cwt = ChemWordTokenizer()
 
 
 def read_list(filename: str) -> Generator[str, None, None]:
@@ -82,7 +78,15 @@ drug_form_words = list(
     read_list(data_path("med-form-words.txt"))
 )  # Read drug form words from a file
 drug_n_gaz = load_gazetteer(data_path("correct_drug_n.txt"))
+drug_gaz = load_gazetteer(data_path("correct_drug.txt"))
+brand_gaz = load_gazetteer(data_path("correct_brand.txt"))
+group_gaz = load_gazetteer(data_path("correct_group.txt"))
+
+
 fp_neg = load_gazetteer(data_path("drug_n_neg.txt"))
+brand_neg = load_gazetteer(data_path("brand_neg.txt"))
+drug_neg = load_gazetteer(data_path("drug_neg.txt"))
+group_neg = load_gazetteer(data_path("group_neg.txt"))
 
 # Read hazardous substances from a file and convert them into a set of strings for faster lookup
 hazardous_substances = set[str]()
@@ -111,44 +115,6 @@ for line in read_list(data_path("drugs.txt")):
             continue
         drug_categories[tag].add(word.lower())
 
-# Load gazeteers
-# pubchem_set = load_gazetteer(data_path("pubchem_synonyms.txt"))
-# chebi_set = load_gazetteer(data_path("chebi_synonyms.txt"))
-# drugbank_set = load_gazetteer(data_path("drugbank_synonyms.txt"))
-
-
-# Advanced REGEX stuff for enhanced drug_n performance
-# Locant Patterns
-locant_pattern_start = re.compile(r"^\d+([,]\d+)*-")
-locant_pattern_internal = re.compile(r".*-\d+([,]\d+)*-.*")  # Search anywhere
-locant_pattern_end = re.compile(r"-\d+[a-zA-Z]?$")  # Search for suffix
-
-# Stereo/Isomer Indicators
-stereo_paren_start = re.compile(
-    r"^\([\+\-\w]+\)"
-)  # Matches (+), (-), (R), (S), (rac)- etc.
-stereo_letter_prefix_start = re.compile(r"^[DdEeLlRrSs]-")  # Matches D-, L-, R-, S-
-stereo_greek_prefix_start = re.compile(
-    r"^(alpha|beta|gamma|delta|omega)-", re.IGNORECASE
-)
-
-# Attachment Points
-attach_point_start = re.compile(r"^[NOPS]-", re.IGNORECASE)  # N-, O-, P-, S-
-
-# Common Chemical Suffixes/Fragments (using search to find at end)
-# This list is from the report, might need curation
-chem_suffix_pattern = re.compile(
-    r"(amine|imine|azole|idine|azine|oxane|anone|anoic|acetyl|phenyl|methyl|ethyl|propyl|butyl|fluoro|chloro|bromo|iodo|hydroxy|methoxy|ethoxy|cyano|nitro|amino|silyl|uracil|thymine|cytosine|guanine|adenine|purine|pyridine|pyran|furan|thiophene|amide|imide|acid|ate|ol|al|one|ene|yne)$",
-    re.IGNORECASE,
-)
-
-# Specific Code Formats
-code_format_az_num = re.compile(r"^[A-Z]+[-]?\d+$")
-code_format_num_az = re.compile(r"^\d+-?[A-Z]+$")
-
-# Bracketed/Complex Structures
-bracketed_paren_whole = re.compile(r"^\([^)]+\)$")  # Token is exactly (...)
-bracketed_square_contains = re.compile(r"\[.*\]")  # Token contains [...]
 
 # Potentially good regex for drug_n
 rx_lead_num_sep = re.compile(r"^\d+([,.]\d+)*[-(\[]")
@@ -182,61 +148,29 @@ drug_n_regexes_list = [
 ]
 
 
-def tokenize(txt: str) -> List[Token]:
+def tokenize(txt: str):
     """
-    Tokenize a text string using ChemWordTokenizer, returning a list of tokens
-    and their start and end positions (inclusive end).
+    Tokenize a text string, returning a list of tokens and their
+    start and end positions in the original string.
 
     Args:
         txt (str): The text string to tokenize.
-
     Returns:
-        List[Token]: A list of tuples, each containing a token string, its
-                     start position, and its inclusive end position.
+        List[Token]: A list of tuples, each containing a token and its
+                     start and end positions in the original string.
     """
 
-    tks: List[Token] = []
-
     offset = 0
-    for t in cwt.tokenize(txt):
+    tks: List[Token] = []
+    for t in word_tokenize(
+        txt
+    ):  # word_tokenize splits words, taking into account punctuations, numbers, etc.
+        # Keep track of the position where each token should appear, and
+        # store that information with the token
         offset = txt.find(t, offset)
         tks.append((t, offset, offset + len(t) - 1))
         offset += len(t)
-
-    # for span in spans:
-    #     token_text = txt[span.start : span.end]  # Extract text using span offsets
-    #     # Store token, start offset, and INCLUSIVE end offset (span.end - 1)
-    #     # This matches the format expected by the original get_tag function
-    #     # based on the offset calculation: offset + len(t) - 1
-    #     tks.append((token_text, span.start, span.end - 1))
-
-    return tks
-
-
-# def tokenize(txt: str):
-#     """
-#     Tokenize a text string, returning a list of tokens and their
-#     start and end positions in the original string.
-#
-#     Args:
-#         txt (str): The text string to tokenize.
-#     Returns:
-#         List[Token]: A list of tuples, each containing a token and its
-#                      start and end positions in the original string.
-#     """
-#
-#     offset = 0
-#     tks: List[Token] = []
-#     for t in word_tokenize(
-#         txt
-#     ):  # word_tokenize splits words, taking into account punctuations, numbers, etc.
-#         # Keep track of the position where each token should appear, and
-#         # store that information with the token
-#         offset = txt.find(t, offset)
-#         tks.append((t, offset, offset + len(t) - 1))
-#         offset += len(t)
-#     return tks  # tks is a list of triples (word,start,end)
-#
+    return tks  # tks is a list of triples (word,start,end)
 
 
 def get_tag(token: Token, spans: List[EntitySpan]):
@@ -269,6 +203,7 @@ def extract_features(tokens: List[Token]):
     """
     # for each token, generate list of features and add it to the result
     result: List[List[str]] = []
+
     pos_tags = nltk.tag.pos_tag(
         [t[0] for t in tokens], tagset="universal"
     )  # Get POS tags for the tokens
@@ -308,37 +243,6 @@ def extract_features(tokens: List[Token]):
         features["is-drug"] = "False"
         features["drug-type"] = "[NA]"
 
-        # # Gazeteer features
-        # features["feat_in_pubchem"] = str(word.lower() in pubchem_set)
-        # features["feat_in_chebi"] = str(word.lower() in chebi_set)
-        # features["feat_in_drugbank"] = str(word.lower() in drugbank_set)
-
-        # Advanced REGEX features
-        features["feat_regex_locant_start"] = str(
-            bool(locant_pattern_start.match(word))
-        )
-        features["feat_regex_locant_internal"] = str(
-            bool(locant_pattern_internal.search(word))
-        )
-        features["feat_regex_locant_end"] = str(bool(locant_pattern_end.search(word)))
-        features["feat_regex_stereo_paren"] = str(bool(stereo_paren_start.match(word)))
-        features["feat_regex_stereo_letter"] = str(
-            bool(stereo_letter_prefix_start.match(word))
-        )
-        features["feat_regex_stereo_greek"] = str(
-            bool(stereo_greek_prefix_start.match(word))
-        )
-        features["feat_regex_attach_point"] = str(bool(attach_point_start.match(word)))
-        features["feat_regex_chem_suffix"] = str(bool(chem_suffix_pattern.search(word)))
-        features["feat_regex_code_az_num"] = str(bool(code_format_az_num.match(word)))
-        features["feat_regex_code_num_az"] = str(bool(code_format_num_az.match(word)))
-        features["feat_regex_bracket_paren"] = str(
-            bool(bracketed_paren_whole.match(word))
-        )
-        features["feat_regex_bracket_square"] = str(
-            bool(bracketed_square_contains.search(word))
-        )
-
         # drug_n regexes
         any_drug_n_regex_matched = False
         # Iterate through the list of compiled regexes and their names
@@ -347,7 +251,7 @@ def extract_features(tokens: List[Token]):
             match_result = compiled_regex.search(word)
             is_match = bool(match_result)
             # Add a feature like "match_rx_lead_num_sep=True"
-            # features[f"match_rx_{name_suffix}"] = str(is_match)
+            features[f"match_rx_{name_suffix}"] = str(is_match)
             if is_match:
                 any_drug_n_regex_matched = True  # Set the flag if any regex matches
 
@@ -375,17 +279,6 @@ def extract_features(tokens: List[Token]):
                 features["drug-type"] = tag
                 break
 
-        # # Fuzzy match for drug names
-        # for tag, drug_words in drug_categories.items():
-        #     for drug_word in drug_words:
-        #         if drug_word in word.lower() or word.lower() in drug_word:
-        #             similarity = len(word.lower()) / max(
-        #                 len(drug_word), len(word.lower())
-        #             )
-        #             if similarity > 0.75:
-        #                 features["fuzzy-drug-match"] = "True"
-        #                 break
-
         for suffix in drug_suffixes:
             if word.lower().endswith(suffix):
                 features["has-med-suffix"] = "True"
@@ -411,10 +304,16 @@ def extract_features(tokens: List[Token]):
         else:
             features["is-med-form-word"] = "False"
 
-        # A) positive gazetteer
+        # False positives
         features["in-drug_n-gaz"] = str(word.lower() in drug_n_gaz)
-        # B) frequent false-positives
+        features["in-drug-gaz"] = str(word.lower() in drug_gaz)
+        features["in-group-gaz"] = str(word.lower() in group_gaz)
+        features["in-brand-gaz"] = str(word.lower() in brand_gaz)
+
         features["is-drug_n-fp"] = str(word.lower() in fp_neg)
+        # features["is-brand-fp"] = str(word.lower() in brand_neg)
+        # features["is-drug-fp"] = str(word.lower() in drug_neg)
+        features["is-group-fp"] = str(word.lower() in group_neg)
 
         # Context window features
         context_size = 5
