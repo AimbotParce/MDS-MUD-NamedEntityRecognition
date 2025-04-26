@@ -1,128 +1,163 @@
-
-import string
 import re
+import string
+from typing import Optional
 
 import numpy as np
+from dataset import *
+from keras import KerasTensor
+from numpy.typing import NDArray
 from tensorflow.keras.preprocessing.sequence import pad_sequences
 
-from dataset import *
 
-class Codemaps :
+class Codemaps:
     # --- constructor, create mapper either from training data, or
     # --- loading codemaps from given file
-    def __init__(self, data, maxlen=None, suflen=None) :
+    def __init__(self, data: Dataset | str, maxlen: Optional[int] = None, suflen: Optional[int] = None):
 
-        if isinstance(data,Dataset) and maxlen is not None and suflen is not None:
-            self.__create_indexs(data, maxlen, suflen)
+        self.word_index: dict[str, int]
+        self.suf_index: dict[str, int]
+        self.label_index: dict[str, int]
+        self.maxlen: int
+        self.suflen: int
 
-        elif type(data) == str and maxlen is None and suflen is None:
+        if isinstance(data, Dataset) and maxlen is not None and suflen is not None:
+            self.__create_indexes(data, maxlen, suflen)
+
+        elif isinstance(data, str) and maxlen is None and suflen is None:
             self.__load(data)
 
         else:
-            print('codemaps: Invalid or missing parameters in constructor')
-            exit()
+            print("codemaps: Invalid or missing parameters in constructor")
+            exit(1)
 
-            
-    # --------- Create indexs from training data
-    # Extract all words and labels in given sentences and 
+    # --------- Create indexes from training data
+    # Extract all words and labels in given sentences and
     # create indexes to encode them as numbers when needed
-    def __create_indexs(self, data, maxlen, suflen) :
-
+    def __create_indexes(self, data: Dataset, maxlen: int, suflen: int):
         self.maxlen = maxlen
         self.suflen = suflen
-        words = set([])
-        lc_words = set([])
-        sufs = set([])
-        labels = set([])
-        
-        for s in data.sentences() :
-            for t in s :
-                words.add(t['form'])
-                sufs.add(t['lc_form'][-self.suflen:])
-                labels.add(t['tag'])
+        words = set[str]()
+        lowercase_words = set[str]()
+        suffixes = set[str]()
+        labels = set[str]()
 
-        self.word_index = {w: i+2 for i,w in enumerate(list(words))}
-        self.word_index['PAD'] = 0 # Padding
-        self.word_index['UNK'] = 1 # Unknown words
+        for sentence_tokens in data.sentences():
+            for tagged_token in sentence_tokens:
+                words.add(tagged_token["form"])
+                suffixes.add(tagged_token["lc_form"][-self.suflen :])
+                labels.add(tagged_token["tag"])
 
-        self.suf_index = {s: i+2 for i,s in enumerate(list(sufs))}
-        self.suf_index['PAD'] = 0  # Padding
-        self.suf_index['UNK'] = 1  # Unknown suffixes
+        self.word_index = {w: i + 2 for i, w in enumerate(list(words))}
+        self.word_index["PAD"] = 0  # Padding
+        self.word_index["UNK"] = 1  # Unknown words
 
-        self.label_index = {t: i+1 for i,t in enumerate(list(labels))}
-        self.label_index['PAD'] = 0 # Padding
-        
-    ## --------- load indexs ----------- 
-    def __load(self, name) : 
+        self.suf_index = {s: i + 2 for i, s in enumerate(list(suffixes))}
+        self.suf_index["PAD"] = 0  # Padding
+        self.suf_index["UNK"] = 1  # Unknown suffixes
+
+        self.label_index = {t: i + 1 for i, t in enumerate(list(labels))}
+        self.label_index["PAD"] = 0  # Padding
+
+    ## --------- load indexes -----------
+    def __load(self, name: str):
         self.maxlen = 0
         self.suflen = 0
         self.word_index = {}
         self.suf_index = {}
         self.label_index = {}
 
-        with open(name+".idx") as f :
-            for line in f.readlines(): 
-                (t,k,i) = line.split()
-                if t == 'MAXLEN' : self.maxlen = int(k)
-                elif t == 'SUFLEN' : self.suflen = int(k)                
-                elif t == 'WORD': self.word_index[k] = int(i)
-                elif t == 'SUF': self.suf_index[k] = int(i)
-                elif t == 'LABEL': self.label_index[k] = int(i)
-                            
-    
+        with open(name + ".idx") as f:
+            for line in f.readlines():
+                (t, k, i) = line.split()
+                if t == "MAXLEN":
+                    self.maxlen = int(k)
+                elif t == "SUFLEN":
+                    self.suflen = int(k)
+                elif t == "WORD":
+                    self.word_index[k] = int(i)
+                elif t == "SUF":
+                    self.suf_index[k] = int(i)
+                elif t == "LABEL":
+                    self.label_index[k] = int(i)
+
     ## ---------- Save model and indexs ---------------
-    def save(self, name) :
+    def save(self, name: str):
         # save indexes
-        with open(name+".idx","w") as f :
-            print ('MAXLEN', self.maxlen, "-", file=f)
-            print ('SUFLEN', self.suflen, "-", file=f)
-            for key in self.label_index : print('LABEL', key, self.label_index[key], file=f)
-            for key in self.word_index : print('WORD', key, self.word_index[key], file=f)
-            for key in self.suf_index : print('SUF', key, self.suf_index[key], file=f)
+        with open(name + ".idx", "w") as f:
+            print("MAXLEN", self.maxlen, "-", file=f)
+            print("SUFLEN", self.suflen, "-", file=f)
+            for key in self.label_index:
+                print("LABEL", key, self.label_index[key], file=f)
+            for key in self.word_index:
+                print("WORD", key, self.word_index[key], file=f)
+            for key in self.suf_index:
+                print("SUF", key, self.suf_index[key], file=f)
 
+    def _encode_word(self, word: str) -> int:
+        """
+        Encode a word into its corresponding index.
+        If the word is not found, return the index for "UNK".
+        """
+        return self.word_index.get(word, self.word_index["UNK"])
 
-    ## --------- encode X from given data ----------- 
-    def encode_words(self, data) :        
+    def _encode_suffix(self, suffix: str) -> int:
+        """
+        Encode a suffix into its corresponding index.
+        If the suffix is not found, return the index for "UNK".
+        """
+        return self.suf_index.get(suffix, self.suf_index["UNK"])
+
+    def _encode_label(self, label: str) -> int:
+        """
+        Encode a label into its corresponding index.
+        If the label is not found, return the index for "UNK".
+        """
+        return self.label_index.get(label, self.label_index["UNK"])
+
+    ## --------- encode X from given data -----------
+    def encode_words(self, data: Dataset) -> List[NDArray[np.int32], NDArray[np.int32]]:
         # encode and pad sentence words
-        Xw = [[self.word_index[w['form']] if w['form'] in self.word_index else self.word_index['UNK'] for w in s] for s in data.sentences()]
-        Xw = pad_sequences(maxlen=self.maxlen, sequences=Xw, padding="post", value=self.word_index['PAD'])
+        Xw = [[self._encode_word(token["form"]) for token in sentence] for sentence in data.sentences()]
+        Xw = pad_sequences(maxlen=self.maxlen, sequences=Xw, padding="post", value=self.word_index["PAD"])
         # encode and pad suffixes
-        Xs = [[self.suf_index[w['lc_form'][-self.suflen:]] if w['lc_form'][-self.suflen:] in self.suf_index else self.suf_index['UNK'] for w in s] for s in data.sentences()]
-        Xs = pad_sequences(maxlen=self.maxlen, sequences=Xs, padding="post", value=self.suf_index['PAD'])
+        Xs = [
+            [self._encode_suffix(token["lc_form"][-self.suflen :]) for token in sentence]
+            for sentence in data.sentences()
+        ]
+        Xs = pad_sequences(maxlen=self.maxlen, sequences=Xs, padding="post", value=self.suf_index["PAD"])
         # return encoded sequences
-        return [Xw,Xs]
+        return [Xw, Xs]
 
-    
-    ## --------- encode Y from given data ----------- 
-    def encode_labels(self, data) :
-        # encode and pad sentence labels 
-        Y = [[self.label_index[w['tag']] for w in s] for s in data.sentences()]
+    ## --------- encode Y from given data -----------
+    def encode_labels(self, data: Dataset) -> NDArray[np.int32]:
+        # encode and pad sentence labels
+        Y = [[self._encode_label(token["tag"]) for token in sentence] for sentence in data.sentences()]
         Y = pad_sequences(maxlen=self.maxlen, sequences=Y, padding="post", value=self.label_index["PAD"])
         return np.array(Y)
 
     ## -------- get word index size ---------
-    def get_n_words(self) :
+    def get_n_words(self):
         return len(self.word_index)
+
     ## -------- get suf index size ---------
-    def get_n_sufs(self) :
+    def get_n_sufs(self):
         return len(self.suf_index)
+
     ## -------- get label index size ---------
-    def get_n_labels(self) :
+    def get_n_labels(self):
         return len(self.label_index)
 
     ## -------- get index for given word ---------
-    def word2idx(self, w) :
+    def word2idx(self, w: str):
         return self.word_index[w]
-    ## -------- get index for given suffix --------
-    def suff2idx(self, s) :
-        return self.suff_index[s]
+
     ## -------- get index for given label --------
-    def label2idx(self, l) :
+    def label2idx(self, l: str):
         return self.label_index[l]
+
     ## -------- get label name for given index --------
-    def idx2label(self, i) :
-        for l in self.label_index :
+    def idx2label(self, i: int):
+        for l in self.label_index:
             if self.label_index[l] == i:
                 return l
         raise KeyError
-

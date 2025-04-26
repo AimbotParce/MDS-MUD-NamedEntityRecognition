@@ -3,6 +3,8 @@
 *.out
 *.stats
 *.joblib
+*.h5
+*.h5.idx
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

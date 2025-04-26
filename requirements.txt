@@ -4,4 +4,3 @@ scikit-learn==1.6.1
 python-crfsuite==0.9.11
 tensorflow==2.19.0
 tqdm==4.67.1
-chemdataextractor2
