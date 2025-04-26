@@ -11,6 +11,7 @@ from numpy.typing import NDArray
 from tensorflow.keras.preprocessing.sequence import pad_sequences
 
 nltk.download("averaged_perceptron_tagger_eng")
+nltk.download("universal_tagset")
 
 
 def data_file(filename: str) -> Path:
