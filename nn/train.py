@@ -24,7 +24,7 @@ def weighted_sparse_categorical_crossentropy(class_weights: dict[int, float]):
         loss = keras.losses.sparse_categorical_crossentropy(y_true, y_pred)
         # Shape: (batch_size, max_len)
         # Compute the class weights
-        weights = tf.gather(cw_tensor, y_true)
+        weights = tf.gather(cw_tensor, tf.cast(y_true, tf.int32))
         # Multiply the loss by the class weights
         loss = loss * weights
         return tf.reduce_mean(loss, axis=-1)
