@@ -8,7 +8,7 @@ import tensorflow as tf
 from codemaps import *
 from dataset import *
 from keras import Input
-from keras.layers import LSTM, Bidirectional, Dense, Dropout, Embedding, Reshape, TimeDistributed, concatenate
+from keras.layers import Conv1D, Dense, Dropout, Embedding, Reshape, TimeDistributed, concatenate
 from keras.models import Model
 
 
@@ -64,6 +64,7 @@ def build_network(codes: Codemaps) -> Model:
     emb_word_pos = concatenate([emb_word, emb_pos])
     # Apply a some dense layers here to mix the embeddings
 
+    # These layers only operate on the last dimension. No contextual information is used.
     emb_word_pos = TimeDistributed(Dense(100, activation="relu"))(emb_word_pos)
     emb_word_pos = Dropout(0.1)(emb_word_pos)  # Add a dropout layer to prevent overfitting
     emb_word_pos = TimeDistributed(Dense(100, activation="relu"))(emb_word_pos)
@@ -90,11 +91,20 @@ def build_network(codes: Codemaps) -> Model:
 
     # Input length will be a single integer at the end... I don't think it'll be that useful
     x = concatenate([emb_word_pos, emb_suffixes, res_length])
+    # At this point, x is a 3D tensor of shape (batch_size, max_len, 100 + 50 + 1)
 
-    # biLSTM
-    x = Bidirectional(LSTM(units=200, return_sequences=True, recurrent_dropout=0.1))(x)
-    # output softmax layer
-    x = TimeDistributed(Dense(n_labels, activation="softmax"))(x)
+    # Operations with the neighbors, to modify embeddings to get contextual information
+    x = Conv1D(filters=100, kernel_size=5, padding="same", activation="relu")(x)
+    x = Dropout(0.1)(x)  # Add a dropout layer to prevent overfitting
+    x = Conv1D(filters=100, kernel_size=5, padding="same", activation="relu")(x)
+    x = Dropout(0.1)(x)  # Add a dropout layer to prevent overfitting
+    x = Conv1D(filters=100, kernel_size=5, padding="same", activation="relu")(x)
+    x = Dropout(0.1)(x)  # Add a dropout layer to prevent overfitting
+
+    # Output layer: Operation with only the word's embedding to convert it to a label
+    x = TimeDistributed(Dense(50, activation="relu"))(x)
+    x = Dropout(0.1)(x)  # Add a dropout layer to prevent overfitting
+    x = TimeDistributed(Dense(n_labels, activation="softmax"), name="output")(x)
 
     # build and compile model
     model = Model([input_words, input_suffixes, input_pos, input_length], x)
