@@ -12,12 +12,11 @@ from keras.layers import LSTM, Bidirectional, Dense, Dropout, Embedding, Reshape
 from keras.models import Model
 
 
-def weighted_sparse_categorical_crossentropy(class_weights: dict[int, float]):
+def weighted_sparse_categorical_crossentropy(class_weights: NDArray[np.float32]):
     """
     Custom loss function to handle class imbalance.
     """
-    max_class = max(class_weights.keys())
-    cw_tensor = tf.constant(list(class_weights[k] for k in range(max_class + 1)), dtype=tf.float32)
+    cw_tensor = tf.constant(class_weights, dtype=tf.float32)
 
     def loss(y_true, y_pred):
         # Compute the losses for all the predictions
@@ -122,20 +121,25 @@ if __name__ == "__main__":
     suf_len = 5
     codes = Codemaps(traindata, max_len, suf_len)
 
-    class_weights = {}
-    min_class_count = min(codes.class_counts.values())
-    print("Class Counts -> Weights:", file=sys.stderr)
-    for i, label in enumerate(codes.label_index):
-        if label in ["PAD", "UNK"]:
-            class_weights[i] = 1.0
-        else:
-            class_weights[i] = min_class_count / codes.class_counts[label]
-        print(f"  {label}: {codes.class_counts.get(label, "NA")} -> {class_weights[i]}", file=sys.stderr)
-
     # build network
     model = build_network(codes)
     with redirect_stdout(sys.stderr):
         model.summary()
+
+    class_weights = np.zeros(codes.get_n_labels(), dtype=np.float32)
+    for label, index in codes.label_index.items():
+        if label not in ["PAD", "UNK"]:
+            class_weights[index] = 1 / codes.class_counts[label]
+
+    class_weights[codes.label_index["UNK"]] = 0.0
+    class_weights = class_weights / np.sum(class_weights)
+
+    print(f"{'Class':<10s}  {'Count':<10s}  Weight", file=sys.stderr)
+    for label, index in codes.label_index.items():
+        print(
+            f"{label:<10s}  {str(codes.class_counts.get(label, "NA")):<10s}  {class_weights[index]:.4f}",
+            file=sys.stderr,
+        )
 
     model.compile(optimizer="adam", loss=weighted_sparse_categorical_crossentropy(class_weights), metrics=["accuracy"])
 

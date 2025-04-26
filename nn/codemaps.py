@@ -67,6 +67,8 @@ class Codemaps:
                 labels.add(tagged_token["tag"])
                 class_counts[tagged_token["tag"]] += 1
 
+            class_counts["PAD"] += max(self.maxlen - len(sentence), 0)
+
         self.class_counts = dict(class_counts)
 
         self.word_index = {w: i + 2 for i, w in enumerate(list(words))}
