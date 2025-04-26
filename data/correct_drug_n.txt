@@ -1,0 +1,238 @@
+1,3-difluoro-2-propanol
+1,3-difluoroacetone
+14- hydroxy- clarithromycin
+16,16-dimethylprostaglandin E2
+18-MC
+18-Methoxycoronaridine
+1-aminobenzotriazole
+1-methyl-4-phenyl-1,2,3,4-tetrahydropyridine
+1-methyl-4-phenyl-1,2,3,6-tetrahydropyridine
+1-methyl-4-phenyl-1,2,5,6-tetrahydropyridine
+25-O-desacetyl metabolites
+25-O-desacetylrifabutin
+(2-adamantyl)hexamethylenimine
+3-[(2-methyl-1,3-thiazol-4-yl) ethynyl] pyridine
+3-Deazaneplanocin A
+3H-spiroperidol
+3-hydroxydesloratadine
+3-Hydroxydesloratadine
+3-hydroxy levobupivacaine
+3-hydroxy ropivacaine
+4-hydroxyatomoxetine
+4-hydroxy-estazolam
+4-hydroxytamoxifen
+4-hydroxytolbutamide
+5-DFCR
+5-DFUR
+5-FU
+5-oxo-desethylzaleplon
+5-oxo-desethylzaleplon glucuronide
+6-beta-naltrexol
+6-deoxy penciclovir
+6MNA
+8-cyclopentyl-1,3-dipropylxanthine
+8-phenyltheophylline
+AAV2
+ABT
+ABT-737
+acetaldehyde
+adeno-associated virus-2
+alcohols
+alpha lipoic acid
+amizyl
+angiotensin
+angiotensin 1
+angiotensin 2
+angiotensins
+AOM
+Arecoline
+arsenate
+As(V)
+azoxymethane
+bentoquatam
+benzoxazinorifamycin
+benzyl alcohol
+Benzyl alcohol
+beta-endorphin
+bombesin
+Bombesin
+buforin II
+Buforin II
+carbamate insecticides
+carbamazepine 10, 11 epoxide
+carbamazepine epoxide
+Carbamazepine epoxide
+carboxymethylcellulose-cysteine
+carboxytolbutamide
+cerulein
+CGS 21680
+CGS21680
+chondroitin ABC lyase
+clofibric acid
+Clofibric acid
+Clostridium difficile toxin A
+clozapine N-oxide
+CMC-Cys
+collagenase
+contortrostatin
+copper sulfate
+coumaphos
+CPA
+CRM197
+cross-reacting material 197
+cytochalasin D
+Cytochalasin D
+D-Ala2-metenkephalinamide
+dapsone hydroxylamine
+DCG-IV
+dehydro-aripiprazole
+dehydroaripiprazole
+desacetyldiltiazem
+desbutyl levobupivacaine
+descarboethoxyloratadine
+desethyloxybutynin
+desglymidodrine
+desmethylastemizole
+desmethylastermizole
+desmethyldiazepam
+desmethyldiltiazem
+DHA
+diethyldithiocarbamate
+diethyl pyrocarbonate
+Diethyl pyrocarbonate
+dmPGE2
+doxorubicinol
+DPCPX
+DZNep
+echistatin
+Echistatin
+EGF
+endotoxin
+endoxifen
+enkephalins
+(-)-erythro-fluorocitrate
+erythrohydrobupropion
+ethoxycoumarin
+FBAL
+fenofibric acid
+filipin
+flavoridin
+Flavoridin
+fosinoprilat
+Furafylline
+Ganoderma lucidum extract
+ginseng stem-and-leaf saponins
+ginsenosides
+GL
+gliftor
+Gliftor
+GSLS
+hemantane
+heparinase III
+heroin
+hyaluronan lyase
+Hyaluronan lyase
+hydrodolasetron
+hydroxybupropion
+hydroxyitraconazole
+hydroxylamine
+hydroxylated fenoprofen
+ibogaine
+Ibogaine
+imexon
+Indocyanine green
+inositol 1,4,5-trisphosphate
+InsP(3)
+iron
+jacalin
+Jacalin
+John's Wort
+KRM-1648
+L-CCG-1
+lead
+leukocyte transfusions
+Leukocyte transfusions
+L-NAME
+methanol
+methylglyoxal
+MHD
+mineral oil
+Mineral Oil
+misonidazole
+Misonidazole
+MPA
+MPAG
+MPTP
+N6-cyclopentyladenosine
+NaCMC
+N-allylnormetazocine
+(+)-NANM
+(-)-NANM
+NANM
+N-desmethylclozapine
+N-desmethyldiazepam
+neurotensin
+N-methyllevallorphan
+norbuprenorphine
+norfluoxetine
+norketamine
+nortriptyline
+olprinone
+omega-agatoxin IVA
+omega-agatoxin VIA
+omega-conotoxin GVIA
+organophosphate insecticide
+PABA
+palytoxin
+Palytoxin
+para-aminobenzoic acid
+paraxanthine
+Paricalcitol
+PCP
+perchlorate
+perindoprilat
+phenazepam
+phencyclidine
+Phencyclidine
+phenibut
+phenyltoloxamine
+phenyramidol
+phosphate
+phosphorous insecticides
+picrotoxin
+piperine
+Piperine
+precocene I
+Precocene I
+PTX
+putrescine
+pyreneperone
+quinpirole
+reseveratrol
+resveratrol
+Resveratrol
+RR
+ruthenium red
+SCH-23390
+SN38
+sodium carboxymethylcellulose
+sodium dodecyl sulfate
+sodium perchlorate
+spermidine
+sulfaphenazole
+TAM
+thimerosal
+Thiolated carboxymethylcellulose
+threohydrobupropion
+TML
+toxin A
+transferrin
+trichlorfon
+trimethyl lead
+tuftsin
+Type II pyrethroid
+tyramine
+vanillin
+vanillylmandelic acid
+VMA
+Zimelidine

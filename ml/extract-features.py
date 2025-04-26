@@ -3,16 +3,149 @@
 Tokenize sentence, returning tokens and span offsets
 """
 import os
+import re
 import sys
+from collections import defaultdict
 from os import listdir
-from typing import List, Tuple, TypeAlias
+from pathlib import Path
+from typing import Any, Dict, Generator, List, Tuple, TypeAlias
 from xml.dom.minidom import parse
 
-import nltk
-from nltk.tokenize import word_tokenize
+import nltk  # type: ignore
+import nltk.tag  # type: ignore
+import numpy as np
+from nltk.corpus import stopwords  # type: ignore
+from nltk.tokenize import word_tokenize  # type: ignore
 
 Token: TypeAlias = Tuple[str, int, int]
 EntitySpan: TypeAlias = Tuple[int, int, str]
+
+nltk.download("averaged_perceptron_tagger_eng")
+nltk.download("universal_tagset")
+nltk.download("stopwords")
+nltk.download("punkt_tab")  # Download the punkt tokenizer models
+
+
+def read_list(filename: str) -> Generator[str, None, None]:
+    """
+    Read a list of strings from a file, stripping whitespace and newlines.
+    Args:
+        filename (str): The name of the file to read.
+    Returns:
+        List[str]: A list of strings read from the file.
+    """
+    with open(filename, "r") as f:
+        return (line.strip() for line in f.readlines())
+
+
+def data_path(filename: str) -> Path:
+    """
+    Get the absolute path of a file in the data directory.
+    Args:
+        filename (str): The name of the file.
+    Returns:
+        file_path (Path): The absolute path of the file.
+    """
+    return (Path(__file__).parent.parent / "data" / filename).resolve()
+
+
+def load_gazetteer(filename: Path) -> set[str]:
+    """Reads a file into a set of lowercase strings (one per line)."""
+    print(f"Loading gazetteer: {filename.name}...", file=sys.stderr)
+    try:
+        with open(filename, "r", encoding="utf-8") as f:
+            # Lowercase and strip whitespace for consistent matching
+            items = {line.strip().lower() for line in f if line.strip()}
+        print(f"Loaded {len(items)} unique entries.", file=sys.stderr)
+        return items
+    except FileNotFoundError:
+        print(f"Warning: Gazetteer file not found: {filename}", file=sys.stderr)
+        return set()  # Return empty set if file doesn't exist
+    except Exception as e:
+        print(f"Error loading gazetteer {filename}: {e}", file=sys.stderr)
+        return set()
+
+
+stopwords = set(stopwords.words("english"))  # Get English stop words from nltk
+
+drug_suffixes = list(
+    read_list(data_path("med-suffixes.txt"))
+)  # Read drug suffixes from a file
+drug_prefixes = list(
+    read_list(data_path("med-prefixes.txt"))
+)  # Read drug suffixes from a file
+drug_form_words = list(
+    read_list(data_path("med-form-words.txt"))
+)  # Read drug form words from a file
+drug_n_gaz = load_gazetteer(data_path("correct_drug_n.txt"))
+drug_gaz = load_gazetteer(data_path("correct_drug.txt"))
+brand_gaz = load_gazetteer(data_path("correct_brand.txt"))
+group_gaz = load_gazetteer(data_path("correct_group.txt"))
+
+
+fp_neg = load_gazetteer(data_path("drug_n_neg.txt"))
+brand_neg = load_gazetteer(data_path("brand_neg.txt"))
+drug_neg = load_gazetteer(data_path("drug_neg.txt"))
+group_neg = load_gazetteer(data_path("group_neg.txt"))
+
+# Read hazardous substances from a file and convert them into a set of strings for faster lookup
+hazardous_substances = set[str]()
+for sentence in read_list(data_path("hazardous-substances.txt")):
+    # Remove stop words
+    for word in nltk.tokenize.word_tokenize(sentence):
+        # Note: Keep in mind that each line may contain words that are not actually
+        # hazardous substances, so let's remove stop words with nltk
+        if word.lower() not in stopwords:
+            hazardous_substances.add(word.lower())
+
+
+word_drug_pattern = re.compile(
+    r"\b(?=\w*[A-Za-z])\w+\b"
+)  # All alphanumeric words (except only digits)
+drug_categories: defaultdict[str, set[str]] = defaultdict(set)
+
+for line in read_list(data_path("drugs.txt")):
+    # This file is a bit different. It contains technical terms for drugs, as well
+    # as their categorization, separated by "|"
+    drug, tag = line.split("|")
+    # Extract all alphanumeric words from the drug name
+    for word in word_drug_pattern.findall(drug):
+        # Add the word to the set of drug words for the corresponding tag
+        if len(word) < 3:  # Ignore words with less than 3 characters
+            continue
+        drug_categories[tag].add(word.lower())
+
+
+# Potentially good regex for drug_n
+rx_lead_num_sep = re.compile(r"^\d+([,.]\d+)*[-(\[]")
+rx_internal_num_sep = re.compile(
+    r"\b[A-Za-z]+\d*[- ,.]\d+\b|\b\d+[- ,.]\d*[A-Za-z]+\b|\b\d+,\d+-\w"
+)
+rx_brackets_parens = re.compile(r"[\(\[]\w*[-]?\w*[\)\]]|\w\(\w+\)")
+rx_potential_code = re.compile(
+    r"\b(?:[A-Z]{2,}\d?|[A-Z]*\d+[A-Z]+|[A-Z]+-\d+|[A-Z]+\d+-|[A-Z\d]+-[A-Z\d]+|\d+-[A-Z]+)(?:-\w+)?\b"
+)
+rx_chem_prefix = re.compile(
+    r"\b(des|nor|dehydro|[bh]ydroxy|methyl|ethyl|phenyl|fluoro|chloro|bromo|iodo|acetyl|carbo|amino|oxo|alpha|beta|gamma|delta|omega|cis|trans|para|meta|ortho|[NO]-)\w+",
+    re.IGNORECASE,
+)
+rx_chem_suffix = re.compile(
+    r"\w+(?:yl|ol|one|ate|ide|ase|ine|azole|idine|azine|oic|al|ene|yne|oxin|idine|amide|tannin|saponin|oside)\b",
+    re.IGNORECASE,
+)
+rx_digit_hyphen = re.compile(r"^(?=.*\d)(?=.*-).+$")
+rx_two_non_alnum = re.compile(r"(?:[^A-Za-z0-9\s].*){2}")
+
+drug_n_regexes_list = [
+    ("lead_num_sep", rx_lead_num_sep),
+    ("internal_num_sep", rx_internal_num_sep),
+    ("brackets_parens", rx_brackets_parens),
+    ("potential_code", rx_potential_code),
+    ("chem_prefix", rx_chem_prefix),
+    ("chem_suffix", rx_chem_suffix),
+    ("digit_hyphen", rx_digit_hyphen),
+    ("two_non_alnum", rx_two_non_alnum),
+]
 
 
 def tokenize(txt: str):
@@ -29,7 +162,9 @@ def tokenize(txt: str):
 
     offset = 0
     tks: List[Token] = []
-    for t in word_tokenize(txt):  # word_tokenize splits words, taking into account punctuations, numbers, etc.
+    for t in word_tokenize(
+        txt
+    ):  # word_tokenize splits words, taking into account punctuations, numbers, etc.
         # Keep track of the position where each token should appear, and
         # store that information with the token
         offset = txt.find(t, offset)
@@ -66,31 +201,152 @@ def extract_features(tokens: List[Token]):
         List[List[str]]: A list of lists, where each inner list contains
                          features for the corresponding token.
     """
-
     # for each token, generate list of features and add it to the result
     result: List[List[str]] = []
-    for k, token in enumerate(tokens):
-        word, start, end = token  # Unpack the token tuple
-        features: List[str] = []
 
-        features.append("form=" + word)  # Token form
-        features.append("suf3=" + word[-3:])
+    pos_tags = nltk.tag.pos_tag(
+        [t[0] for t in tokens], tagset="universal"
+    )  # Get POS tags for the tokens
+    assert len(tokens) == len(pos_tags), "Mismatch between tokens and POS tags length"
+    for k, (word, pos_tag) in enumerate(pos_tags):
+        features: Dict[str, str] = {}
 
-        if k > 0:
-            tPrev = tokens[k - 1][0]
-            features.append("formPrev=" + tPrev)  # Token form of previous token
-            features.append("suf3Prev=" + tPrev[-3:])  # Suffix of previous token ???
+        features["form"] = word  # Token form
+        features["form-lower"] = word.lower()  # Lowercase form of the token
+        features["is-capitalized"] = str(
+            word[0].isupper()
+        )  # Is the first letter capitalized?
+        features["is-uppercase"] = str(word.isupper())  # Is the token all uppercase?
+        features["has-digit"] = str(
+            any(c.isdigit() for c in word)
+        )  # Does the token contain a digit?
+        features["has-punct"] = str(
+            any(c in ".,;:!?" for c in word)
+        )  # Does the token contain punctuation?
+        features["has-hyphen"] = str("-" in word)  # Does the token contain a hyphen?
+        features["length"] = str(len(word))  # Length of the token
+        features["is-long"] = str(len(word) > 5)  # Is the token long?
+        features["pos-tag"] = pos_tag  # POS tag of the token
+        features["is-bos"] = str(
+            k == 0
+        )  # Is the token at the beginning of the sentence?
+        features["is-eos"] = str(
+            k == len(tokens) - 1
+        )  # Is the token at the end of the sentence?
+        features["is-stopword"] = str(
+            word.lower() in stopwords
+        )  # Is the token a stop word?
+        features["is-hazardous"] = str(
+            word.lower() in hazardous_substances
+        )  # Is the token a hazardous substance?
+
+        features["is-drug"] = "False"
+        features["drug-type"] = "[NA]"
+
+        # drug_n regexes
+        any_drug_n_regex_matched = False
+        # Iterate through the list of compiled regexes and their names
+        for name_suffix, compiled_regex in drug_n_regexes_list:
+            # Use search() to find the pattern anywhere in the word
+            match_result = compiled_regex.search(word)
+            is_match = bool(match_result)
+            # Add a feature like "match_rx_lead_num_sep=True"
+            features[f"match_rx_{name_suffix}"] = str(is_match)
+            if is_match:
+                any_drug_n_regex_matched = True  # Set the flag if any regex matches
+
+        rx_hits = sum(1 for _, rx in drug_n_regexes_list if rx.search(word))
+        features["drug_n_regex_hits"] = str(rx_hits)  # categorical feature
+        features["drug_n_regex_ge2"] = str(rx_hits >= 2)  # binary shortcut
+
+        # Add the combined feature: True if any of the drug_n regexes matched
+        features["potential_drug_n"] = str(any_drug_n_regex_matched)
+
+        # Character n-gram features
+        # Consider lengths 3 and 4, (maybe 5??)
+        char_ngram_lengths = [3, 4]
+        # Add boundary markers for prefix/suffix detection
+        word_lower_padded = f"^{word.lower()}$"
+        for n in char_ngram_lengths:
+            if len(word_lower_padded) >= n:
+                for i in range(len(word_lower_padded) - n + 1):
+                    ngram = word_lower_padded[i : i + n]
+                    features[f"char_ngram_{n}_{ngram}"] = "True"
+
+        for tag, drug_words in drug_categories.items():
+            if word in drug_words:
+                features["is-drug"] = "True"
+                features["drug-type"] = tag
+                break
+
+        for suffix in drug_suffixes:
+            if word.lower().endswith(suffix):
+                features["has-med-suffix"] = "True"
+                features["med-suffix"] = suffix
+                break
         else:
-            features.append("BoS")  # Beginning of Sentence
+            features["has-med-suffix"] = "False"
+            features["med-suffix"] = "[NA]"
 
-        if k < len(tokens) - 1:
-            tNext = tokens[k + 1][0]
-            features.append("formNext=" + tNext)  # Token form of next token
-            features.append("suf3Next=" + tNext[-3:])  # Suffix of previous token ???
+        for prefix in drug_prefixes:
+            if word.lower().startswith(prefix):
+                features["has-med-prefix"] = "True"
+                features["med-prefix"] = prefix
+                break
         else:
-            features.append("EoS")  # End of Sentence
+            features["has-med-prefix"] = "False"
+            features["med-prefix"] = "[NA]"
 
-        result.append(features)
+        for form_word in drug_form_words:
+            if word.lower() == form_word:
+                features["is-med-form-word"] = "True"
+                break
+        else:
+            features["is-med-form-word"] = "False"
+
+        # False positives
+        features["in-drug_n-gaz"] = str(word.lower() in drug_n_gaz)
+        features["in-drug-gaz"] = str(word.lower() in drug_gaz)
+        features["in-group-gaz"] = str(word.lower() in group_gaz)
+        features["in-brand-gaz"] = str(word.lower() in brand_gaz)
+
+        features["is-drug_n-fp"] = str(word.lower() in fp_neg)
+        # features["is-brand-fp"] = str(word.lower() in brand_neg)
+        # features["is-drug-fp"] = str(word.lower() in drug_neg)
+        features["is-group-fp"] = str(word.lower() in group_neg)
+
+        # Context window features
+        context_size = 5
+        context_info = defaultdict(lambda: np.zeros(context_size, dtype=bool))
+        for j, i in enumerate(
+            range(-(context_size // 2), context_size - (context_size // 2))
+        ):
+            if k + i < 0 or k + i >= len(tokens):
+                # If this is outside the sentence
+                continue
+            context_word = tokens[k + i][0]
+            if i != 0:
+                context_word_features: Dict[str, str] = {}
+                context_word_features["form-lower"] = context_word.lower()
+                context_word_features["length"] = str(len(context_word))
+                for key, val in context_word_features.items():
+                    # Adds features like "ctx-l2-length=12", meaning "length of word two to the left is 12"
+                    ctx_i = f"r{i}" if i > 0 else f"l{-i}"
+                    features[f"ctx-{ctx_i}-{key}"] = val
+
+            if context_word[0].isupper():
+                context_info["is-capitalized"][j] = True
+            if context_word.isupper():
+                context_info["is-uppercase"][j] = True
+            if any(c.isdigit() for c in context_word):
+                context_info["has-digit"][j] = True
+            if "-" in context_word:
+                context_info["has-hyphen"][j] = True
+
+        for key, vals in context_info.items():
+            features[f"ctx-{key}"] = "".join("1" if v else "0" for v in vals)
+
+        result.append(list(f"{key}={val}" for key, val in features.items()))
 
     return result
 
@@ -101,29 +357,46 @@ def main(datadir: str):
     Args:
         datadir (str): The directory containing the XML files.
     """
+
     for f in listdir(datadir):  # List all files in the directory
         tree = parse(os.path.join(datadir, f))  # Parse XML file, obtaining a DOM tree
-        sentence_elements = tree.getElementsByTagName("sentence")  # Get all sentences in the file
+        sentence_elements = tree.getElementsByTagName(
+            "sentence"
+        )  # Get all sentences in the file
         for sentence in sentence_elements:
             sentence_id = sentence.attributes["id"].value  # Get sentence id
             spans: List[EntitySpan] = []
             sentence_content = sentence.attributes["text"].value  # Get sentence text
-            entity_elements = sentence.getElementsByTagName("entity")  # Get pre-annotated entities
+            entity_elements = sentence.getElementsByTagName(
+                "entity"
+            )  # Get pre-annotated entities
             for entity in entity_elements:
                 # For discontinuous entities, we only get the first span
                 # (will not work, but there are few of them)
-                (start, end) = entity.attributes["charOffset"].value.split(";")[0].split("-")
+                (start, end) = (
+                    entity.attributes["charOffset"].value.split(";")[0].split("-")
+                )
                 entity_type = entity.attributes["type"].value
                 spans.append((int(start), int(end), entity_type))
 
-            tokens = tokenize(sentence_content)  # Convert the sentence to a list of tokens
+            tokens = tokenize(
+                sentence_content
+            )  # Convert the sentence to a list of tokens
             features = extract_features(tokens)  # Extract sentence features
 
             # Print features in format expected by crfsuite trainer
             for i in range(0, len(tokens)):
                 # See if the token is part of an entity
                 tag = get_tag(tokens[i], spans)
-                print(sentence_id, tokens[i][0], tokens[i][1], tokens[i][2], tag, "\t".join(features[i]), sep="\t")
+                print(
+                    sentence_id,
+                    tokens[i][0],
+                    tokens[i][1],
+                    tokens[i][2],
+                    tag,
+                    "\t".join(features[i]),
+                    sep="\t",
+                )
 
             # blank line to separate sentences
             print()
