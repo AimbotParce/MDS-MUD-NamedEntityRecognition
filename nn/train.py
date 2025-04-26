@@ -6,7 +6,7 @@ from contextlib import redirect_stdout
 from codemaps import *
 from dataset import *
 from keras import Input
-from keras.layers import LSTM, Bidirectional, Dense, Dropout, Embedding, Lambda, TimeDistributed, concatenate
+from keras.layers import LSTM, Bidirectional, Dense, Dropout, Embedding, Reshape, TimeDistributed, concatenate
 from keras.models import Model
 
 
@@ -16,25 +16,68 @@ def build_network(codes: Codemaps) -> Model:
     n_words = codes.get_n_words()
     n_sufs = codes.get_n_sufs()
     n_labels = codes.get_n_labels()
+    n_pos_tags = codes.get_n_pos_tags()
     max_len = codes.maxlen
 
-    inptW = Input(shape=(max_len,))  # word input layer & embeddings
-    embW = Embedding(input_dim=n_words, output_dim=100, input_length=max_len, mask_zero=False)(inptW)
+    # Embed the words themselves
+    input_words = Input(shape=(max_len,), name="input_words")
+    emb_word = Embedding(
+        input_dim=n_words,
+        output_dim=100,
+        input_length=max_len,
+        mask_zero=False,
+        name="embed_words",
+    )(input_words)
+    emb_word = Dropout(0.1)(emb_word)  # Add a dropout layer to prevent overfitting
 
-    inptS = Input(shape=(max_len,))  # suf input layer & embeddings
-    embS = Embedding(input_dim=n_sufs, output_dim=50, input_length=max_len, mask_zero=False)(inptS)
+    # Embed the pos tags
+    input_pos = Input(shape=(max_len,), name="input_pos")
+    emb_pos = Embedding(
+        input_dim=n_pos_tags,
+        output_dim=n_pos_tags,
+        input_length=max_len,
+        mask_zero=False,
+        name="embed_pos",
+    )(input_pos)
 
-    dropW = Dropout(0.1)(embW)
-    dropS = Dropout(0.1)(embS)
-    drops = concatenate([dropW, dropS])
+    # Modify the word embeddings to include the pos tag embeddings
+    emb_word_pos = concatenate([emb_word, emb_pos])
+    # Apply a some dense layers here to mix the embeddings
+
+    emb_word_pos = TimeDistributed(Dense(100, activation="relu"))(emb_word_pos)
+    emb_word_pos = Dropout(0.1)(emb_word_pos)  # Add a dropout layer to prevent overfitting
+    emb_word_pos = TimeDistributed(Dense(100, activation="relu"))(emb_word_pos)
+    emb_word_pos = Dropout(0.1)(emb_word_pos)
+    # At this point, emb_word_pos is a 3D tensor of shape (batch_size, max_len, 100) which would be a disambiguated
+    # embedding of the word.
+
+    # Embed the suffixes
+    input_suffixes = Input(shape=(max_len,), name="input_suffixes")
+    emb_suffixes = Embedding(
+        input_dim=n_sufs,
+        output_dim=50,
+        input_length=max_len,
+        mask_zero=False,
+        name="embed_suffixes",
+    )(input_suffixes)
+    emb_suffixes = Dropout(0.1)(emb_suffixes)
+
+    # And add the length of the word as a feature
+    # This is a 2D tensor of shape (batch_size, max_len)
+    input_length = Input(shape=(max_len,), name="input_length")
+    # Reshape it to be a 3D tensor of shape (batch_size, max_len, 1)
+    res_length = Reshape((max_len, 1))(input_length)
+
+    # Input length will be a single integer at the end... I don't think it'll be that useful
+    x = concatenate([emb_word_pos, emb_suffixes, res_length])
 
     # biLSTM
-    bilstm = Bidirectional(LSTM(units=200, return_sequences=True, recurrent_dropout=0.1))(drops)
+    x = Bidirectional(LSTM(units=200, return_sequences=True, recurrent_dropout=0.1))(x)
     # output softmax layer
-    out = TimeDistributed(Dense(n_labels, activation="softmax"))(bilstm)
+    x = TimeDistributed(Dense(n_labels, activation="softmax"))(x)
 
     # build and compile model
-    model = Model([inptW, inptS], out)
+    model = Model([input_words, input_suffixes, input_pos, input_length], x)
     model.compile(optimizer="adam", loss="sparse_categorical_crossentropy", metrics=["accuracy"])
 
     return model
