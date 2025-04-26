@@ -55,8 +55,9 @@ class Codemaps:
         self.suf_index["PAD"] = 0  # Padding
         self.suf_index["UNK"] = 1  # Unknown suffixes
 
-        self.label_index = {t: i + 1 for i, t in enumerate(list(labels))}
+        self.label_index = {t: i + 2 for i, t in enumerate(list(labels))}
         self.label_index["PAD"] = 0  # Padding
+        self.label_index["UNK"] = 1  # Unknown labels
 
     ## --------- load indexes -----------
     def __load(self, name: str):
