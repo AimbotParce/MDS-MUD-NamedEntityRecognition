@@ -1,5 +1,8 @@
+import json
 import re
 import string
+from collections import defaultdict
+from pathlib import Path
 from typing import Optional
 
 import numpy as np
@@ -8,17 +11,29 @@ from keras import KerasTensor
 from numpy.typing import NDArray
 from tensorflow.keras.preprocessing.sequence import pad_sequences
 
+nltk.download("averaged_perceptron_tagger_eng")
+nltk.download("universal_tagset")
+
+
+def data_file(filename: str) -> Path:
+    """
+    Returns the path to the data file.
+    """
+    return (Path(__file__).parent.parent / "data" / filename).resolve()
+
 
 class Codemaps:
     # --- constructor, create mapper either from training data, or
     # --- loading codemaps from given file
     def __init__(self, data: Dataset | str, maxlen: Optional[int] = None, suflen: Optional[int] = None):
 
-        self.word_index: dict[str, int]
-        self.suf_index: dict[str, int]
-        self.label_index: dict[str, int]
+        self.word_index: Dict[str, int]
+        self.suf_index: Dict[str, int]
+        self.label_index: Dict[str, int]
         self.maxlen: int
         self.suflen: int
+        self.class_counts: Dict[str, int]
+        self.pos_tag_index: Dict[str, int]
 
         if isinstance(data, Dataset) and maxlen is not None and suflen is not None:
             self.__create_indexes(data, maxlen, suflen)
@@ -40,12 +55,21 @@ class Codemaps:
         lowercase_words = set[str]()
         suffixes = set[str]()
         labels = set[str]()
+        pos_tags = set[str]()
+        class_counts: defaultdict[str, int] = defaultdict(int)
 
-        for sentence_tokens in data.sentences():
-            for tagged_token in sentence_tokens:
-                words.add(tagged_token["form"])
+        for sentence in data.sentences():
+            sent_pos_tags = nltk.tag.pos_tag([token["lc_form"] for token in sentence], tagset="universal")
+            pos_tags.update([pos_tag for _, pos_tag in sent_pos_tags])
+            for tagged_token in sentence:
+                words.add(tagged_token["lc_form"])
                 suffixes.add(tagged_token["lc_form"][-self.suflen :])
                 labels.add(tagged_token["tag"])
+                class_counts[tagged_token["tag"]] += 1
+
+            class_counts["PAD"] += max(self.maxlen - len(sentence), 0)
+
+        self.class_counts = dict(class_counts)
 
         self.word_index = {w: i + 2 for i, w in enumerate(list(words))}
         self.word_index["PAD"] = 0  # Padding
@@ -59,6 +83,10 @@ class Codemaps:
         self.label_index["PAD"] = 0  # Padding
         self.label_index["UNK"] = 1  # Unknown labels
 
+        self.pos_tag_index = {t: i + 2 for i, t in enumerate(list(pos_tags))}
+        self.pos_tag_index["PAD"] = 0  # Padding
+        self.pos_tag_index["UNK"] = 1  # Unknown PoS tags
+
     ## --------- load indexes -----------
     def __load(self, name: str):
         self.maxlen = 0
@@ -66,6 +94,8 @@ class Codemaps:
         self.word_index = {}
         self.suf_index = {}
         self.label_index = {}
+        self.pos_tag_index = {}
+        self.class_counts: Dict[str, int] = {}
 
         with open(name + ".idx") as f:
             for line in f.readlines():
@@ -80,8 +110,12 @@ class Codemaps:
                     self.suf_index[k] = int(i)
                 elif t == "LABEL":
                     self.label_index[k] = int(i)
+                elif t == "POS":
+                    self.pos_tag_index[k] = int(i)
+                elif t == "COUNT":
+                    self.class_counts[k] = int(i)
 
-    ## ---------- Save model and indexs ---------------
+    ## ---------- Save model and indexes ---------------
     def save(self, name: str):
         # save indexes
         with open(name + ".idx", "w") as f:
@@ -93,6 +127,10 @@ class Codemaps:
                 print("WORD", key, self.word_index[key], file=f)
             for key in self.suf_index:
                 print("SUF", key, self.suf_index[key], file=f)
+            for key in self.pos_tag_index:
+                print("POS", key, self.pos_tag_index[key], file=f)
+            for key in self.class_counts:
+                print("COUNT", key, self.class_counts[key], file=f)
 
     def _encode_word(self, word: str) -> int:
         """
@@ -108,6 +146,14 @@ class Codemaps:
         """
         return self.suf_index.get(suffix, self.suf_index["UNK"])
 
+    def _encode_pos_tag(self, pos_tag: str) -> int:
+        """
+        Encode a PoS tag into its corresponding index.
+        If the PoS tag is not found, return the index for "UNK".
+        """
+        # Assuming PoS tags are already in the label_index
+        return self.pos_tag_index.get(pos_tag, self.pos_tag_index["UNK"])
+
     def _encode_label(self, label: str) -> int:
         """
         Encode a label into its corresponding index.
@@ -116,18 +162,30 @@ class Codemaps:
         return self.label_index.get(label, self.label_index["UNK"])
 
     ## --------- encode X from given data -----------
-    def encode_words(self, data: Dataset) -> Tuple[NDArray[np.int32], NDArray[np.int32]]:
+    def encode_words(
+        self, data: Dataset
+    ) -> Tuple[NDArray[np.int32], NDArray[np.int32], NDArray[np.float32], NDArray[np.int32]]:
         # encode and pad sentence words
-        Xw = [[self._encode_word(token["form"]) for token in sentence] for sentence in data.sentences()]
-        Xw = pad_sequences(maxlen=self.maxlen, sequences=Xw, padding="post", value=self.word_index["PAD"])
+        X_word = [[self._encode_word(token["lc_form"]) for token in sentence] for sentence in data.sentences()]
+        X_word = pad_sequences(maxlen=self.maxlen, sequences=X_word, padding="post", value=self.word_index["PAD"])
         # encode and pad suffixes
-        Xs = [
+        X_suffix = [
             [self._encode_suffix(token["lc_form"][-self.suflen :]) for token in sentence]
             for sentence in data.sentences()
         ]
-        Xs = pad_sequences(maxlen=self.maxlen, sequences=Xs, padding="post", value=self.suf_index["PAD"])
+        X_suffix = pad_sequences(maxlen=self.maxlen, sequences=X_suffix, padding="post", value=self.suf_index["PAD"])
+        # Save Word Lengths
+        X_length = [[len(token["lc_form"]) for token in sentence] for sentence in data.sentences()]
+        X_length = pad_sequences(maxlen=self.maxlen, sequences=X_length, padding="post", value=0)
+        # Add PoS tags
+        X_pos = []
+        for sentence in data.sentences():
+            pos_tags = nltk.tag.pos_tag([token["lc_form"] for token in sentence], tagset="universal")
+            X_pos.append([self._encode_pos_tag(pos_tag) for _, pos_tag in pos_tags])
+        X_pos = pad_sequences(maxlen=self.maxlen, sequences=X_pos, padding="post", value=self.pos_tag_index["PAD"])
+
         # return encoded sequences
-        return Xw, Xs
+        return X_word, X_suffix, X_pos, X_length
 
     ## --------- encode Y from given data -----------
     def encode_labels(self, data: Dataset) -> NDArray[np.int32]:
@@ -147,6 +205,9 @@ class Codemaps:
     ## -------- get label index size ---------
     def get_n_labels(self):
         return len(self.label_index)
+
+    def get_n_pos_tags(self):
+        return len(self.pos_tag_index)
 
     ## -------- get index for given word ---------
     def word2idx(self, w: str):
