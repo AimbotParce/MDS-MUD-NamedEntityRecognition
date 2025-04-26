@@ -115,7 +115,7 @@ class Codemaps:
         return self.label_index.get(label, self.label_index["UNK"])
 
     ## --------- encode X from given data -----------
-    def encode_words(self, data: Dataset) -> List[NDArray[np.int32], NDArray[np.int32]]:
+    def encode_words(self, data: Dataset) -> Tuple[NDArray[np.int32], NDArray[np.int32]]:
         # encode and pad sentence words
         Xw = [[self._encode_word(token["form"]) for token in sentence] for sentence in data.sentences()]
         Xw = pad_sequences(maxlen=self.maxlen, sequences=Xw, padding="post", value=self.word_index["PAD"])
@@ -126,7 +126,7 @@ class Codemaps:
         ]
         Xs = pad_sequences(maxlen=self.maxlen, sequences=Xs, padding="post", value=self.suf_index["PAD"])
         # return encoded sequences
-        return [Xw, Xs]
+        return Xw, Xs
 
     ## --------- encode Y from given data -----------
     def encode_labels(self, data: Dataset) -> NDArray[np.int32]:
