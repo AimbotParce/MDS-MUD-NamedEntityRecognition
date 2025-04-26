@@ -130,7 +130,6 @@ if __name__ == "__main__":
             class_weights[i] = 1.0
         else:
             class_weights[i] = min_class_count / codes.class_counts[label]
-        # class_weights[i] = 1.0
         print(f"  {label}: {codes.class_counts.get(label, "NA")} -> {class_weights[i]}", file=sys.stderr)
 
     # build network
