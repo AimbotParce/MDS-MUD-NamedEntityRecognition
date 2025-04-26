@@ -50,9 +50,12 @@ class Codemaps:
         lowercase_words = set[str]()
         suffixes = set[str]()
         labels = set[str]()
+        pos_tags = set[str]()
 
-        for sentence_tokens in data.sentences():
-            for tagged_token in sentence_tokens:
+        for sentence in data.sentences():
+            sent_pos_tags = nltk.tag.pos_tag([token["lc_form"] for token in sentence], tagset="universal")
+            pos_tags.update([pos_tag for _, pos_tag in sent_pos_tags])
+            for tagged_token in sentence:
                 words.add(tagged_token["lc_form"])
                 suffixes.add(tagged_token["lc_form"][-self.suflen :])
                 labels.add(tagged_token["tag"])
@@ -69,7 +72,9 @@ class Codemaps:
         self.label_index["PAD"] = 0  # Padding
         self.label_index["UNK"] = 1  # Unknown labels
 
-        self.pos_tag_index: Dict[str, int] = json.loads(data_file("universal-pos-tags.json").read_text())
+        self.pos_tag_index = {t: i + 2 for i, t in enumerate(list(pos_tags))}
+        self.pos_tag_index["PAD"] = 0  # Padding
+        self.pos_tag_index["UNK"] = 1  # Unknown PoS tags
 
     ## --------- load indexes -----------
     def __load(self, name: str):
@@ -92,11 +97,10 @@ class Codemaps:
                     self.suf_index[k] = int(i)
                 elif t == "LABEL":
                     self.label_index[k] = int(i)
+                elif t == "POS":
+                    self.pos_tag_index[k] = int(i)
 
-        # Add universal PoS tags
-        self.pos_tag_index: Dict[str, int] = json.loads(data_file("universal-pos-tags.json").read_text())
-
-    ## ---------- Save model and indexs ---------------
+    ## ---------- Save model and indexes ---------------
     def save(self, name: str):
         # save indexes
         with open(name + ".idx", "w") as f:
@@ -108,6 +112,8 @@ class Codemaps:
                 print("WORD", key, self.word_index[key], file=f)
             for key in self.suf_index:
                 print("SUF", key, self.suf_index[key], file=f)
+            for key in self.pos_tag_index:
+                print("POS", key, self.pos_tag_index[key], file=f)
 
     def _encode_word(self, word: str) -> int:
         """
