@@ -37,48 +37,60 @@ def weighted_sparse_categorical_crossentropy(class_weights: NDArray[np.float32])
 def build_network(codes: Codemaps) -> Model:
     # sizes
     n_syllables = codes.get_n_syllables()
+    n_pos_tags = codes.get_n_pos_tags()
     n_labels = codes.get_n_labels()
     max_sentence_len = codes.max_sentence_length
     max_word_len = codes.max_word_length
 
-    # Embed the words themselves
-    input_subwords = Input(shape=(max_sentence_len, max_word_len), name="input_words")
-    x = Embedding(input_dim=n_syllables, output_dim=100, mask_zero=False, name="embed_syllables")(input_subwords)
-    x = Dropout(0.1)(x)  # Add a dropout layer to prevent overfitting
-    # At this point, x has shape (batch_size, max_sentence_len, max_word_len, 100)
+    input_words = Input(shape=(max_sentence_len, max_word_len), name="input_words")  # Syllable-split words
+    input_pos_tags = Input(shape=(max_sentence_len,), name="input_pos_tags")  # POS tags
+
+    # ----------------------------- Word embeddings ----------------------------
+    w = Embedding(input_dim=n_syllables, output_dim=100, mask_zero=False, name="embed_syllables")(input_words)
+    w = Dropout(0.1)(w)
+    # At this point, w has shape (batch_size, max_sentence_len, max_word_len, 100)
     # Form a proper word embedding by performing some operations on the syllable embeddings
-    x = TimeDistributed(Conv1D(filters=100, kernel_size=3, padding="same", activation="relu"), name="conv_syllable1")(x)
-    x = Dropout(0.1)(x)  # Add a dropout layer to prevent overfitting
-    x = TimeDistributed(Conv1D(filters=50, kernel_size=3, padding="same", activation="relu"), name="conv_syllable2")(x)
-    x = Dropout(0.1)(x)  # Add a dropout layer to prevent overfitting
+    w = TimeDistributed(Conv1D(filters=100, kernel_size=3, padding="same", activation="relu"), name="conv_word_1")(w)
+    w = Dropout(0.1)(w)
+    w = TimeDistributed(Conv1D(filters=50, kernel_size=3, padding="same", activation="relu"), name="conv_word_2")(w)
+    w = Dropout(0.1)(w)
 
-    x = TimeDistributed(Flatten(), name="flatten_embedding_s2w")(x)
-    # At this point, x has shape (batch_size, max_sentence_len, max_word_len * 100)
-    # Let's perform a Dense layer to finish getting a proper word embedding
-    x = TimeDistributed(Dense(200, activation="relu"), name="dense_word_embeddings1")(x)
-    x = Dropout(0.1)(x)  # Add a dropout layer to prevent overfitting
-    x = TimeDistributed(Dense(200, activation="relu"), name="dense_word_embeddings2")(x)
-    x = Dropout(0.1)(x)  # Add a dropout layer to prevent overfitting
+    w = TimeDistributed(Flatten(), name="flatten_word")(w)
+    # ------------ (batch_size, max_sentence_len, max_word_len * 50) -----------
 
-    # In this point, x has shape (batch_size, max_sentence_len, 200), so we should
-    # have a proper word embedding.
+    # ----------------------------- PoS embeddings -----------------------------
+    p = Embedding(input_dim=n_pos_tags, output_dim=n_pos_tags, mask_zero=False, name="embed_pos_tag")(input_pos_tags)
+    # --------------- (batch_size, max_sentence_len, n_pos_tags) ---------------
 
+    # ---------------------- Disambiguated Word embeddings ---------------------
+    # Concatenate the word and PoS embeddings
+    x = concatenate([w, p], axis=-1)
+
+    # Let's perform a Dense layer to combine those two and get a proper disambiguated word embedding
+    x = TimeDistributed(Dense(200, activation="relu"), name="dense_disambiguate_1")(x)
+    x = Dropout(0.1)(x)
+    x = TimeDistributed(Dense(200, activation="relu"), name="dense_disambiguate_2")(x)
+    x = Dropout(0.1)(x)
+    # ------------------- (batch_size, max_sentence_len, 200) ------------------
+
+    # -------------------------- Contextual embeddings -------------------------
     # Operations with the neighbors, to modify embeddings to get contextual information
-    x = Conv1D(filters=200, kernel_size=9, padding="same", activation="relu", name="sentence_conv_1")(x)
-    x = Dropout(0.1)(x)  # Add a dropout layer to prevent overfitting
-    x = Conv1D(filters=200, kernel_size=7, padding="same", activation="relu", name="sentence_conv_2")(x)
-    x = Dropout(0.1)(x)  # Add a dropout layer to prevent overfitting
-    x = Conv1D(filters=200, kernel_size=5, padding="same", activation="relu", name="sentence_conv_3")(x)
-    x = Dropout(0.1)(x)  # Add a dropout layer to prevent overfitting
+    x = Conv1D(filters=200, kernel_size=9, padding="same", activation="relu", name="conv_context_1")(x)
+    x = Dropout(0.1)(x)
+    x = Conv1D(filters=200, kernel_size=7, padding="same", activation="relu", name="conv_context_2")(x)
+    x = Dropout(0.1)(x)
+    x = Conv1D(filters=200, kernel_size=5, padding="same", activation="relu", name="conv_context_3")(x)
+    x = Dropout(0.1)(x)
+    # ------------------- (batch_size, max_sentence_len, 200) ------------------
 
+    # ----------------------------- Categorization -----------------------------
     # Output layer: Operation with only the word's embedding to convert it to a label
-    x = TimeDistributed(Dense(50, activation="relu"), name="word_dense")(x)
-    x = Dropout(0.1)(x)  # Add a dropout layer to prevent overfitting
+    x = TimeDistributed(Dense(50, activation="relu"), name="dense_category_1")(x)
+    x = Dropout(0.1)(x)
     x = TimeDistributed(Dense(n_labels, activation="softmax"), name="output")(x)
+    # ---------------- (batch_size, max_sentence_len, n_labels) ----------------
 
-    # build and compile model
-    model = Model(input_subwords, x)
-    return model
+    return Model([input_words, input_pos_tags], x)
 
 
 def _batch_words(words: Iterable[str], max_len: int, pad_length: int = 0) -> Generator[list[str], None, None]:
@@ -151,7 +163,6 @@ if __name__ == "__main__":
     # for label, index in codes.label_index.items():
     #     if label not in ["PAD", "UNK"]:
     #         class_weights[index] = 1 / np.sqrt(codes.class_counts[label])
-
     # class_weights[codes.label_index["UNK"]] = 0.0
     # class_weights = class_weights / np.sum(class_weights)
 

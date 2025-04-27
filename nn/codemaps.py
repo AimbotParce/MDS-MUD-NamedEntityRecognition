@@ -35,6 +35,7 @@ class Codemaps:
         self._syllable_tokenizer = CustomSyllableTokenizer(nltk.corpus.words.words())
         self.syllable_index: Dict[str, int]
         self.label_index: Dict[str, int]
+        self.pos_tag_index: Dict[str, int]
         self.max_sentence_length: int
         self.max_word_length: int
         self.class_counts: Dict[str, int]
@@ -57,6 +58,7 @@ class Codemaps:
         self.max_word_length = max_word_length
         syllables = set[str]()
         labels = set[str]()
+        pos_tags = set[str]()
         class_counts: defaultdict[str, int] = defaultdict(int)
         sentences_too_long: list[str] = list()
         words_too_long: list[str] = list()
@@ -74,6 +76,9 @@ class Codemaps:
                 labels.add(tagged_token["tag"])
                 class_counts[tagged_token["tag"]] += 1
                 total_words += 1
+
+            sentence_pos_tags = nltk.tag.pos_tag([token["lc_form"] for token in sentence], tagset="universal")
+            pos_tags.update([tag for _, tag in sentence_pos_tags])
 
             class_counts["PAD"] += max(self.max_sentence_length - len(sentence), 0)
 
@@ -104,12 +109,17 @@ class Codemaps:
         self.label_index["PAD"] = 0  # Padding
         self.label_index["UNK"] = 1  # Unknown labels
 
+        self.pos_tag_index = {t: i + 2 for i, t in enumerate(list(pos_tags))}
+        self.pos_tag_index["PAD"] = 0  # Padding
+        self.pos_tag_index["UNK"] = 1  # Unknown labels
+
     ## --------- load indexes -----------
     def __load(self, name: str):
         self.max_sentence_length = 0
         self.max_word_length = 0
         self.syllable_index = {}
         self.label_index = {}
+        self.pos_tag_index = {}
         self.class_counts: Dict[str, int] = {}
 
         with open(name + ".idx") as f:
@@ -125,6 +135,8 @@ class Codemaps:
                     self.label_index[k] = int(i)
                 elif t == "COUNT":
                     self.class_counts[k] = int(i)
+                elif t == "POS":
+                    self.pos_tag_index[k] = int(i)
 
     ## ---------- Save model and indexes ---------------
     def save(self, name: str):
@@ -138,6 +150,8 @@ class Codemaps:
                 print("SYLLABLE", key, self.syllable_index[key], file=f)
             for key in self.class_counts:
                 print("COUNT", key, self.class_counts[key], file=f)
+            for key in self.pos_tag_index:
+                print("POS", key, self.pos_tag_index[key], file=f)
 
     def _encode_syllable(self, syllable: str) -> int:
         """
@@ -152,6 +166,13 @@ class Codemaps:
         If the label is not found, return the index for "UNK".
         """
         return self.label_index.get(label, self.label_index["UNK"])
+
+    def _encode_pos_tag(self, pos_tag: str) -> int:
+        """
+        Encode a POS tag into its corresponding index.
+        If the POS tag is not found, return the index for "UNK".
+        """
+        return self.pos_tag_index.get(pos_tag, self.pos_tag_index["UNK"])
 
     ## --------- encode X from given data -----------
     def encode_words(self, data: Dataset) -> NDArray[np.int32]:
@@ -175,8 +196,23 @@ class Codemaps:
             padding="post",
             value=[self.syllable_index["PAD"]] * self.max_word_length,
         )
+
+        X_pos_tags = [
+            [
+                self._encode_pos_tag(tag)
+                for tag in nltk.tag.pos_tag([token["lc_form"] for token in sentence], tagset="universal")
+            ]
+            for sentence in data.sentences()
+        ]
+        X_pos_tags = pad_sequences(
+            maxlen=self.max_sentence_length,
+            sequences=X_pos_tags,
+            padding="post",
+            value=self.pos_tag_index["PAD"],
+        )
+
         # return encoded sequences
-        return X_word
+        return X_word, X_pos_tags
 
     ## --------- encode Y from given data -----------
     def encode_labels(self, data: Dataset) -> NDArray[np.int32]:
@@ -188,6 +224,9 @@ class Codemaps:
     ## -------- get word index size ---------
     def get_n_syllables(self):
         return len(self.syllable_index)
+
+    def get_n_pos_tags(self):
+        return len(self.pos_tag_index)
 
     ## -------- get label index size ---------
     def get_n_labels(self):
