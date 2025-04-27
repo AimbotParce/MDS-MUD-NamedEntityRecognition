@@ -6,7 +6,7 @@ from os import system
 import evaluator
 from codemaps import *
 from dataset import *
-from tensorflow.keras.models import Model, load_model
+from keras.models import Model, load_model
 
 ## --------- Entity extractor -----------
 ## -- Extract drug entities from given text and return them as
@@ -18,7 +18,7 @@ def output_entities(data, preds, outfile):
     outf = open(outfile, "w")
     for sid, tags in zip(data.sentence_ids(), preds):
         inside = False
-        for k in range(0, min(len(data.get_sentence(sid)), codes.maxlen)):
+        for k in range(0, min(len(data.get_sentence(sid)), codes.max_sentence_length)):
             y = tags[k]
             token = data.get_sentence(sid)[k]
 
