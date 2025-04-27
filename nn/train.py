@@ -119,7 +119,13 @@ if __name__ == "__main__":
     with redirect_stdout(sys.stderr):
         model.summary()
 
-    class_weights = np.ones(codes.get_n_labels(), dtype=np.float32)
+    class_weights = np.zeros(codes.get_n_labels(), dtype=np.float32)
+    for label, index in codes.label_index.items():
+        if label not in ["PAD", "UNK"]:
+            class_weights[index] = 1 / np.sqrt(codes.class_counts[label])
+
+    class_weights[codes.label_index["UNK"]] = 0.0
+    class_weights = class_weights / np.sum(class_weights)
 
     print(f"{'Class':<10s}  {'Count':<10s}  Weight", file=sys.stderr)
     for label, index in codes.label_index.items():
