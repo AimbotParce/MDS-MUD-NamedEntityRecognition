@@ -4,7 +4,6 @@ from typing import Optional
 
 import numpy as np
 from dataset import *
-from keras import KerasTensor
 from numpy.typing import NDArray
 from tensorflow.keras.preprocessing.sequence import pad_sequences
 
