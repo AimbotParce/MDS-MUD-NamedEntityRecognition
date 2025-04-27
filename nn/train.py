@@ -8,8 +8,7 @@ import tensorflow as tf
 from codemaps import *
 from dataset import *
 from keras import Input
-from keras.layers import (Conv1D, Dense, Dropout, Embedding, Reshape,
-                          TimeDistributed, concatenate)
+from keras.layers import Conv1D, Dense, Dropout, Embedding, MultiHeadAttention, Reshape, TimeDistributed, concatenate
 from keras.models import Model
 
 
@@ -95,11 +94,7 @@ def build_network(codes: Codemaps) -> Model:
     # At this point, x is a 3D tensor of shape (batch_size, max_len, 100 + 50 + 1)
 
     # Operations with the neighbors, to modify embeddings to get contextual information
-    x = Conv1D(filters=100, kernel_size=5, padding="same", activation="relu")(x)
-    x = Dropout(0.1)(x)  # Add a dropout layer to prevent overfitting
-    x = Conv1D(filters=100, kernel_size=5, padding="same", activation="relu")(x)
-    x = Dropout(0.1)(x)  # Add a dropout layer to prevent overfitting
-    x = Conv1D(filters=100, kernel_size=5, padding="same", activation="relu")(x)
+    x = MultiHeadAttention(num_heads=4, key_dim=100, name="attention")(x, x)
     x = Dropout(0.1)(x)  # Add a dropout layer to prevent overfitting
 
     # Output layer: Operation with only the word's embedding to convert it to a label
