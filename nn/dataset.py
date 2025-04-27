@@ -3,9 +3,11 @@ import xml.dom.minidom
 from typing import Dict, List, Tuple, TypeAlias, TypedDict
 
 import nltk
+import nltk.corpus
 import nltk.tokenize
 
 nltk.download("punkt_tab")
+nltk.download("words")
 
 
 class TokenDict(TypedDict):
@@ -29,6 +31,9 @@ class Dataset:
     #  Parse all XML files in given dir, and load a list of sentences.
     #  Each sentence is a list of tuples (word, start, end, tag)
     def __init__(self, datadir):
+
+        self._syllable_tokenizer = nltk.tokenize.LegalitySyllableTokenizer(nltk.corpus.words.words())
+
         self.data: Dict[str, List[TaggedTokenDict]] = {}
         # process each file in directory
         for f in os.listdir(datadir):
@@ -67,12 +72,17 @@ class Dataset:
         offset = 0  # To optimize the search for the token in the text
         tokens: List[TokenDict] = []
         # word_tokenize splits words, taking into account punctuations, numbers, etc.
-        for token in nltk.tokenize.word_tokenize(text):
-            # Keep track of the position where each token should appear, and
-            # store that information with the token
-            offset = text.find(token, offset)
-            tokens.append({"lc_form": token.lower(), "form": token, "start": offset, "end": offset + len(token) - 1})
-            offset += len(token)
+        for word in nltk.tokenize.word_tokenize(text):
+            # Instead of using the words as the tokens, we'll further split them
+            # into syllables, using the LegalitySyllableTokenizer
+            for token in self._syllable_tokenizer.tokenize(word):
+                # Keep track of the position where each token should appear, and
+                # store that information with the token
+                offset = text.find(token, offset)
+                tokens.append(
+                    {"lc_form": token.lower(), "form": token, "start": offset, "end": offset + len(token) - 1}
+                )
+                offset += len(token)
 
         return tokens
 

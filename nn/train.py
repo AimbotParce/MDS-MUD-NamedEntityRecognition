@@ -2,14 +2,16 @@
 
 import sys
 from contextlib import redirect_stdout
+from itertools import batched
+from typing import Generator, Iterable
 
 import keras.losses
 import tensorflow as tf
 from codemaps import *
+from colorama import Style
 from dataset import *
 from keras import Input
-from keras.layers import (Conv1D, Dense, Dropout, Embedding, Reshape,
-                          TimeDistributed, concatenate)
+from keras.layers import Conv1D, Dense, Dropout, Embedding, Reshape, TimeDistributed, concatenate
 from keras.models import Model
 
 
@@ -35,71 +37,22 @@ def weighted_sparse_categorical_crossentropy(class_weights: NDArray[np.float32])
 def build_network(codes: Codemaps) -> Model:
     # sizes
     n_words = codes.get_n_words()
-    n_sufs = codes.get_n_sufs()
     n_labels = codes.get_n_labels()
-    n_pos_tags = codes.get_n_pos_tags()
     max_len = codes.maxlen
 
     # Embed the words themselves
-    input_words = Input(shape=(max_len,), name="input_words")
-    emb_word = Embedding(
-        input_dim=n_words,
-        output_dim=100,
-        input_length=max_len,
-        mask_zero=False,
-        name="embed_words",
-    )(input_words)
-    emb_word = Dropout(0.1)(emb_word)  # Add a dropout layer to prevent overfitting
-
-    # Embed the pos tags
-    input_pos = Input(shape=(max_len,), name="input_pos")
-    emb_pos = Embedding(
-        input_dim=n_pos_tags,
-        output_dim=n_pos_tags,
-        input_length=max_len,
-        mask_zero=False,
-        name="embed_pos",
-    )(input_pos)
-
-    # Modify the word embeddings to include the pos tag embeddings
-    emb_word_pos = concatenate([emb_word, emb_pos])
-    # Apply a some dense layers here to mix the embeddings
-
-    # These layers only operate on the last dimension. No contextual information is used.
-    emb_word_pos = TimeDistributed(Dense(100, activation="relu"))(emb_word_pos)
-    emb_word_pos = Dropout(0.1)(emb_word_pos)  # Add a dropout layer to prevent overfitting
-    emb_word_pos = TimeDistributed(Dense(100, activation="relu"))(emb_word_pos)
-    emb_word_pos = Dropout(0.1)(emb_word_pos)
-    # At this point, emb_word_pos is a 3D tensor of shape (batch_size, max_len, 100) which would be a disambiguated
-    # embedding of the word.
-
-    # Embed the suffixes
-    input_suffixes = Input(shape=(max_len,), name="input_suffixes")
-    emb_suffixes = Embedding(
-        input_dim=n_sufs,
-        output_dim=50,
-        input_length=max_len,
-        mask_zero=False,
-        name="embed_suffixes",
-    )(input_suffixes)
-    emb_suffixes = Dropout(0.1)(emb_suffixes)
-
-    # And add the length of the word as a feature
-    # This is a 2D tensor of shape (batch_size, max_len)
-    input_length = Input(shape=(max_len,), name="input_length")
-    # Reshape it to be a 3D tensor of shape (batch_size, max_len, 1)
-    res_length = Reshape((max_len, 1))(input_length)
-
-    # Input length will be a single integer at the end... I don't think it'll be that useful
-    x = concatenate([emb_word_pos, emb_suffixes, res_length])
-    # At this point, x is a 3D tensor of shape (batch_size, max_len, 100 + 50 + 1)
+    input_subwords = Input(shape=(max_len,), name="input_subwords")
+    x = Embedding(input_dim=n_words, output_dim=200, input_length=max_len, mask_zero=False, name="embed_subwords")(
+        input_subwords
+    )
+    x = Dropout(0.1)(x)  # Add a dropout layer to prevent overfitting
 
     # Operations with the neighbors, to modify embeddings to get contextual information
-    x = Conv1D(filters=100, kernel_size=5, padding="same", activation="relu")(x)
+    x = Conv1D(filters=200, kernel_size=9, padding="same", activation="relu")(x)
     x = Dropout(0.1)(x)  # Add a dropout layer to prevent overfitting
-    x = Conv1D(filters=100, kernel_size=5, padding="same", activation="relu")(x)
+    x = Conv1D(filters=200, kernel_size=7, padding="same", activation="relu")(x)
     x = Dropout(0.1)(x)  # Add a dropout layer to prevent overfitting
-    x = Conv1D(filters=100, kernel_size=5, padding="same", activation="relu")(x)
+    x = Conv1D(filters=200, kernel_size=5, padding="same", activation="relu")(x)
     x = Dropout(0.1)(x)  # Add a dropout layer to prevent overfitting
 
     # Output layer: Operation with only the word's embedding to convert it to a label
@@ -108,8 +61,37 @@ def build_network(codes: Codemaps) -> Model:
     x = TimeDistributed(Dense(n_labels, activation="softmax"), name="output")(x)
 
     # build and compile model
-    model = Model([input_words, input_suffixes, input_pos, input_length], x)
+    model = Model(input_subwords, x)
     return model
+
+
+def _batch_words(words: Iterable[str], max_len: int, pad_length: int = 0) -> Generator[list[str], None, None]:
+    """
+    Batch words into lists of lists of strings, each with a maximum length of max_len.
+    """
+    batch = []
+    current_length = 0
+    for word in words:
+        word_length = len(word) + pad_length
+        if current_length + word_length > max_len:
+            yield batch
+            batch = []
+            current_length = 0
+        batch.append(word)
+        current_length += word_length
+    if batch:
+        yield batch
+
+
+def print_sentences(sentences: Iterable[TaggedTokenDict]):
+    for sentence in sentences:
+        words = [f"{token['form']:<{max(len(token['form']),len(token['tag']))}s}" for token in sentence]
+        tags = [f"{token['tag']:<{max(len(token['form']),len(token['tag']))}s}" for token in sentence]
+        cols = os.get_terminal_size().columns
+        for wl, tl in zip(_batch_words(words, cols, pad_length=1), _batch_words(tags, cols, pad_length=1)):
+            print("│".join(wl), file=sys.stderr)
+            print("│".join(f"{Style.DIM}{t}{Style.RESET_ALL}" for t in tl), file=sys.stderr)
+        print("")
 
 
 if __name__ == "__main__":
@@ -128,9 +110,9 @@ if __name__ == "__main__":
     valdata = Dataset(validationdir)
 
     # create indexes from training data
-    max_len = 150
-    suf_len = 5
-    codes = Codemaps(traindata, max_len, suf_len)
+    max_len = max(len(sentence) for sentence in traindata.sentences())
+    # This isn't really standard, but meh, we'll just use the max length of the training data
+    codes = Codemaps(traindata, max_len)
 
     # build network
     model = build_network(codes)
