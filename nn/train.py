@@ -10,7 +10,7 @@ from keras.layers import LSTM, Bidirectional, Dense, Dropout, Embedding, Lambda,
 from keras.models import Model
 
 
-def build_network(codes):
+def build_network(codes: Codemaps) -> Model:
 
     # sizes
     n_words = codes.get_n_words()
