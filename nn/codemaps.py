@@ -1,32 +1,83 @@
-
 import string
 import re
+import sys
+from pathlib import Path
 
 import numpy as np
 from tensorflow.keras.preprocessing.sequence import pad_sequences
 
 from dataset import *
 
-class Codemaps :
+
+def data_path(filename: str) -> Path:
+    """
+    Get the absolute path of a file in the data directory.
+    Args:
+        filename (str): The name of the file.
+    Returns:
+        file_path (Path): The absolute path of the file.
+    """
+    return (Path(__file__).parent.parent / "data" / filename).resolve()
+
+
+def load_gazetteer(filename: Path) -> set[str]:
+    """Reads a file into a set of lowercase strings (one per line)."""
+    print(f"Loading gazetteer: {filename.name}...", file=sys.stderr)
+    try:
+        with open(filename, "r", encoding="utf-8") as f:
+            # Lowercase and strip whitespace for consistent matching
+            items = {line.strip().lower() for line in f if line.strip()}
+        print(f"Loaded {len(items)} unique entries.", file=sys.stderr)
+        return items
+    except FileNotFoundError:
+        print(f"Warning: Gazetteer file not found: {filename}", file=sys.stderr)
+        return set()  # Return empty set if file doesn't exist
+    except Exception as e:
+        print(f"Error loading gazetteer {filename}: {e}", file=sys.stderr)
+        return set()
+
+
+class Codemaps:
     # --- constructor, create mapper either from training data, or
     # --- loading codemaps from given file
-    def __init__(self, data, maxlen=None, suflen=None) :
+    def __init__(self, data, maxlen=None, suflen=None):
 
-        if isinstance(data,Dataset) and maxlen is not None and suflen is not None:
+        self.gazetteer_features = [
+            "in_drug_n_gaz",
+            "in_drug_gaz",
+            "in_brand_gaz",
+            "in_group_gaz",
+            "is_drug_n_fp",
+            "is_drug_fp",
+            "is_brand_fp",
+            "is_group_fp",
+        ]
+
+        if isinstance(data, Dataset) and maxlen is not None and suflen is not None:
             self.__create_indexs(data, maxlen, suflen)
 
         elif type(data) == str and maxlen is None and suflen is None:
             self.__load(data)
 
+            print("Loading Gazetteers for prediction...")
+            self.drug_n_gaz = load_gazetteer(data_path("correct_drug_n.txt"))
+            self.drug_gaz = load_gazetteer(data_path("correct_drug.txt"))
+            self.brand_gaz = load_gazetteer(data_path("correct_brand.txt"))
+            self.group_gaz = load_gazetteer(data_path("correct_group.txt"))
+
+            self.drug_n_gaz_fp = load_gazetteer(data_path("drug_n_neg.txt"))
+            self.drug_gaz_fp = load_gazetteer(data_path("drug_neg.txt"))
+            self.brand_gaz_fp = load_gazetteer(data_path("brand_neg.txt"))
+            self.group_gaz_fp = load_gazetteer(data_path("group_neg.txt"))
+
         else:
-            print('codemaps: Invalid or missing parameters in constructor')
+            print("codemaps: Invalid or missing parameters in constructor")
             exit()
 
-            
     # --------- Create indexs from training data
-    # Extract all words and labels in given sentences and 
+    # Extract all words and labels in given sentences and
     # create indexes to encode them as numbers when needed
-    def __create_indexs(self, data, maxlen, suflen) :
+    def __create_indexs(self, data, maxlen, suflen):
 
         self.maxlen = maxlen
         self.suflen = suflen
@@ -34,95 +85,177 @@ class Codemaps :
         lc_words = set([])
         sufs = set([])
         labels = set([])
-        
-        for s in data.sentences() :
-            for t in s :
-                words.add(t['form'])
-                sufs.add(t['lc_form'][-self.suflen:])
-                labels.add(t['tag'])
 
-        self.word_index = {w: i+2 for i,w in enumerate(list(words))}
-        self.word_index['PAD'] = 0 # Padding
-        self.word_index['UNK'] = 1 # Unknown words
+        for s in data.sentences():
+            for t in s:
+                words.add(t["form"])
+                sufs.add(t["lc_form"][-self.suflen :])
+                labels.add(t["tag"])
 
-        self.suf_index = {s: i+2 for i,s in enumerate(list(sufs))}
-        self.suf_index['PAD'] = 0  # Padding
-        self.suf_index['UNK'] = 1  # Unknown suffixes
+        self.drug_n_gaz = load_gazetteer(data_path("correct_drug_n.txt"))
+        self.drug_gaz = load_gazetteer(data_path("correct_drug.txt"))
+        self.brand_gaz = load_gazetteer(data_path("correct_brand.txt"))
+        self.group_gaz = load_gazetteer(data_path("correct_group.txt"))
 
-        self.label_index = {t: i+1 for i,t in enumerate(list(labels))}
-        self.label_index['PAD'] = 0 # Padding
-        
-    ## --------- load indexs ----------- 
-    def __load(self, name) : 
+        self.drug_n_gaz_fp = load_gazetteer(data_path("drug_n_neg.txt"))
+        self.drug_gaz_fp = load_gazetteer(data_path("drug_neg.txt"))
+        self.brand_gaz_fp = load_gazetteer(data_path("brand_neg.txt"))
+        self.group_gaz_fp = load_gazetteer(data_path("group_neg.txt"))
+
+        self.word_index = {w: i + 2 for i, w in enumerate(list(words))}
+        self.word_index["PAD"] = 0  # Padding
+        self.word_index["UNK"] = 1  # Unknown words
+
+        self.suf_index = {s: i + 2 for i, s in enumerate(list(sufs))}
+        self.suf_index["PAD"] = 0  # Padding
+        self.suf_index["UNK"] = 1  # Unknown suffixes
+
+        self.label_index = {t: i + 1 for i, t in enumerate(list(labels))}
+        self.label_index["PAD"] = 0  # Padding
+
+    def encode_gazetteer_features(self, data):
+        Xg = []
+
+        for sentence in data.sentences():
+            sentence_features = []
+
+            for token in sentence:
+                word = token["form"].lower()
+                features = [
+                    1 if word in self.drug_n_gaz else 0,
+                    1 if word in self.drug_gaz else 0,
+                    1 if word in self.brand_gaz else 0,
+                    1 if word in self.group_gaz else 0,
+                    # ========= False positives =========
+                    1 if word in self.drug_n_gaz_fp else 0,
+                    1 if word in self.drug_gaz_fp else 0,
+                    1 if word in self.brand_gaz_fp else 0,
+                    1 if word in self.group_gaz_fp else 0,
+                ]
+                sentence_features.append(features)
+
+            Xg.append(sentence_features)
+
+        Xg = pad_sequences(maxlen=self.maxlen, sequences=Xg, padding="post", value=0)
+        return Xg
+
+    ## --------- load indexs -----------
+    def __load(self, name):
         self.maxlen = 0
         self.suflen = 0
         self.word_index = {}
         self.suf_index = {}
         self.label_index = {}
 
-        with open(name+".idx") as f :
-            for line in f.readlines(): 
-                (t,k,i) = line.split()
-                if t == 'MAXLEN' : self.maxlen = int(k)
-                elif t == 'SUFLEN' : self.suflen = int(k)                
-                elif t == 'WORD': self.word_index[k] = int(i)
-                elif t == 'SUF': self.suf_index[k] = int(i)
-                elif t == 'LABEL': self.label_index[k] = int(i)
-                            
-    
+        with open(name + ".idx") as f:
+            for line in f.readlines():
+                (t, k, i) = line.split()
+                if t == "MAXLEN":
+                    self.maxlen = int(k)
+                elif t == "SUFLEN":
+                    self.suflen = int(k)
+                elif t == "WORD":
+                    self.word_index[k] = int(i)
+                elif t == "SUF":
+                    self.suf_index[k] = int(i)
+                elif t == "LABEL":
+                    self.label_index[k] = int(i)
+
     ## ---------- Save model and indexs ---------------
-    def save(self, name) :
+    def save(self, name):
         # save indexes
-        with open(name+".idx","w") as f :
-            print ('MAXLEN', self.maxlen, "-", file=f)
-            print ('SUFLEN', self.suflen, "-", file=f)
-            for key in self.label_index : print('LABEL', key, self.label_index[key], file=f)
-            for key in self.word_index : print('WORD', key, self.word_index[key], file=f)
-            for key in self.suf_index : print('SUF', key, self.suf_index[key], file=f)
+        with open(name + ".idx", "w") as f:
+            print("MAXLEN", self.maxlen, "-", file=f)
+            print("SUFLEN", self.suflen, "-", file=f)
+            for key in self.label_index:
+                print("LABEL", key, self.label_index[key], file=f)
+            for key in self.word_index:
+                print("WORD", key, self.word_index[key], file=f)
+            for key in self.suf_index:
+                print("SUF", key, self.suf_index[key], file=f)
 
-
-    ## --------- encode X from given data ----------- 
-    def encode_words(self, data) :        
+    ## --------- encode X from given data -----------
+    def encode_words(self, data):
         # encode and pad sentence words
-        Xw = [[self.word_index[w['form']] if w['form'] in self.word_index else self.word_index['UNK'] for w in s] for s in data.sentences()]
-        Xw = pad_sequences(maxlen=self.maxlen, sequences=Xw, padding="post", value=self.word_index['PAD'])
+        Xw = [
+            [
+                (
+                    self.word_index[w["form"]]
+                    if w["form"] in self.word_index
+                    else self.word_index["UNK"]
+                )
+                for w in s
+            ]
+            for s in data.sentences()
+        ]
+        Xw = pad_sequences(
+            maxlen=self.maxlen,
+            sequences=Xw,
+            padding="post",
+            value=self.word_index["PAD"],
+        )
         # encode and pad suffixes
-        Xs = [[self.suf_index[w['lc_form'][-self.suflen:]] if w['lc_form'][-self.suflen:] in self.suf_index else self.suf_index['UNK'] for w in s] for s in data.sentences()]
-        Xs = pad_sequences(maxlen=self.maxlen, sequences=Xs, padding="post", value=self.suf_index['PAD'])
-        # return encoded sequences
-        return [Xw,Xs]
+        Xs = [
+            [
+                (
+                    self.suf_index[w["lc_form"][-self.suflen :]]
+                    if w["lc_form"][-self.suflen :] in self.suf_index
+                    else self.suf_index["UNK"]
+                )
+                for w in s
+            ]
+            for s in data.sentences()
+        ]
+        Xs = pad_sequences(
+            maxlen=self.maxlen,
+            sequences=Xs,
+            padding="post",
+            value=self.suf_index["PAD"],
+        )
 
-    
-    ## --------- encode Y from given data ----------- 
-    def encode_labels(self, data) :
-        # encode and pad sentence labels 
-        Y = [[self.label_index[w['tag']] for w in s] for s in data.sentences()]
-        Y = pad_sequences(maxlen=self.maxlen, sequences=Y, padding="post", value=self.label_index["PAD"])
+        Xg = self.encode_gazetteer_features(data)
+
+        return [Xw, Xs, Xg]
+
+    ## --------- encode Y from given data -----------
+    def encode_labels(self, data):
+        # encode and pad sentence labels
+        Y = [[self.label_index[w["tag"]] for w in s] for s in data.sentences()]
+        Y = pad_sequences(
+            maxlen=self.maxlen,
+            sequences=Y,
+            padding="post",
+            value=self.label_index["PAD"],
+        )
         return np.array(Y)
 
     ## -------- get word index size ---------
-    def get_n_words(self) :
+    def get_n_words(self):
         return len(self.word_index)
+
     ## -------- get suf index size ---------
-    def get_n_sufs(self) :
+    def get_n_sufs(self):
         return len(self.suf_index)
+
     ## -------- get label index size ---------
-    def get_n_labels(self) :
+    def get_n_labels(self):
         return len(self.label_index)
 
     ## -------- get index for given word ---------
-    def word2idx(self, w) :
+    def word2idx(self, w):
         return self.word_index[w]
+
     ## -------- get index for given suffix --------
-    def suff2idx(self, s) :
+    def suff2idx(self, s):
         return self.suff_index[s]
+
     ## -------- get index for given label --------
-    def label2idx(self, l) :
+    def label2idx(self, l):
         return self.label_index[l]
+
     ## -------- get label name for given index --------
-    def idx2label(self, i) :
-        for l in self.label_index :
+    def idx2label(self, i):
+        for l in self.label_index:
             if self.label_index[l] == i:
                 return l
         raise KeyError
-

@@ -6,7 +6,16 @@ from contextlib import redirect_stdout
 from codemaps import *
 from dataset import *
 from keras import Input
-from keras.layers import LSTM, Bidirectional, Dense, Dropout, Embedding, Lambda, TimeDistributed, concatenate
+from keras.layers import (
+    LSTM,
+    Bidirectional,
+    Dense,
+    Dropout,
+    Embedding,
+    Lambda,
+    TimeDistributed,
+    concatenate,
+)
 from keras.models import Model
 
 
@@ -16,26 +25,37 @@ def build_network(codes):
     n_words = codes.get_n_words()
     n_sufs = codes.get_n_sufs()
     n_labels = codes.get_n_labels()
+    num_gazetteer_features = 8
     max_len = codes.maxlen
 
     inptW = Input(shape=(max_len,))  # word input layer & embeddings
-    embW = Embedding(input_dim=n_words, output_dim=100, input_length=max_len, mask_zero=False)(inptW)
+    embW = Embedding(
+        input_dim=n_words, output_dim=100, input_length=max_len, mask_zero=False
+    )(inptW)
 
     inptS = Input(shape=(max_len,))  # suf input layer & embeddings
-    embS = Embedding(input_dim=n_sufs, output_dim=50, input_length=max_len, mask_zero=False)(inptS)
+    embS = Embedding(
+        input_dim=n_sufs, output_dim=50, input_length=max_len, mask_zero=False
+    )(inptS)
+
+    inptG = Input(shape=(max_len, num_gazetteer_features))  # No need for embedding
 
     dropW = Dropout(0.1)(embW)
     dropS = Dropout(0.1)(embS)
-    drops = concatenate([dropW, dropS])
+    drops = concatenate([dropW, dropS, inptG])
 
     # biLSTM
-    bilstm = Bidirectional(LSTM(units=200, return_sequences=True, recurrent_dropout=0.1))(drops)
+    bilstm = Bidirectional(
+        LSTM(units=200, return_sequences=True, recurrent_dropout=0.1)
+    )(drops)
     # output softmax layer
     out = TimeDistributed(Dense(n_labels, activation="softmax"))(bilstm)
 
     # build and compile model
-    model = Model([inptW, inptS], out)
-    model.compile(optimizer="adam", loss="sparse_categorical_crossentropy", metrics=["accuracy"])
+    model = Model([inptW, inptS, inptG], out)
+    model.compile(
+        optimizer="adam", loss="sparse_categorical_crossentropy", metrics=["accuracy"]
+    )
 
     return model
 
