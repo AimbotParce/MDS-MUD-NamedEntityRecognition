@@ -94,7 +94,10 @@ def build_network(codes: Codemaps) -> Model:
     # At this point, x is a 3D tensor of shape (batch_size, max_len, 100 + 50 + 1)
 
     # Operations with the neighbors, to modify embeddings to get contextual information
-    x = MultiHeadAttention(num_heads=4, key_dim=100, name="attention")(x, x)
+    x = MultiHeadAttention(num_heads=4, key_dim=100, name="attention_1")(x, x)
+    x = Dropout(0.1)(x)  # Add a dropout layer to prevent overfitting
+    # Operations with the neighbors, to modify embeddings to get contextual information
+    x = MultiHeadAttention(num_heads=4, key_dim=100, name="attention_2")(x, x)
     x = Dropout(0.1)(x)  # Add a dropout layer to prevent overfitting
 
     # Output layer: Operation with only the word's embedding to convert it to a label
