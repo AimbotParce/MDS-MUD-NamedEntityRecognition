@@ -75,6 +75,18 @@ def extract_features(tokens: List[Token]):
 
         features.append("form=" + word)  # Token form
         features.append("suf3=" + word[-3:])
+        features.append("suf2=" + word[-2:])
+        features.append("suf1=" + word[-1:])
+        features.append("pre1=" + word[0:1])
+        features.append("pre2=" + word[0:2])
+        features.append("pre3=" + word[0:3])
+        features.append("capitalized=" + str(word[0].isupper()))  # Is the first letter capitalized?
+        features.append("uppercase=" + str(word.isupper()))  # Is the token all uppercase?
+        features.append("hasdigit=" + str(any(c.isdigit() for c in word)))  # Does the token contain a digit?
+        features.append("haspunct=" + str(any(c in ".,;:!?" for c in word)))  # Does the token contain punctuation?
+        features.append("hashyphen=" + str("-" in word))  # Does the token contain a hyphen?
+        features.append("length=" + str(len(word)))  # Length of the token
+        features.append("form_lower=" + word.lower())  # Lowercase form of the token
 
         if k > 0:
             tPrev = tokens[k - 1][0]
