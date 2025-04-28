@@ -37,6 +37,40 @@ def load_gazetteer(filename: Path) -> set[str]:
         return set()
 
 
+def regex_features():
+    # Potentially good regex for drug_n
+    rx_lead_num_sep = re.compile(r"^\d+([,.]\d+)*[-(\[]")
+    rx_internal_num_sep = re.compile(
+        r"\b[A-Za-z]+\d*[- ,.]\d+\b|\b\d+[- ,.]\d*[A-Za-z]+\b|\b\d+,\d+-\w"
+    )
+    rx_brackets_parens = re.compile(r"[\(\[]\w*[-]?\w*[\)\]]|\w\(\w+\)")
+    rx_potential_code = re.compile(
+        r"\b(?:[A-Z]{2,}\d?|[A-Z]*\d+[A-Z]+|[A-Z]+-\d+|[A-Z]+\d+-|[A-Z\d]+-[A-Z\d]+|\d+-[A-Z]+)(?:-\w+)?\b"
+    )
+    rx_chem_prefix = re.compile(
+        r"\b(des|nor|dehydro|[bh]ydroxy|methyl|ethyl|phenyl|fluoro|chloro|bromo|iodo|acetyl|carbo|amino|oxo|alpha|beta|gamma|delta|omega|cis|trans|para|meta|ortho|[NO]-)\w+",
+        re.IGNORECASE,
+    )
+    rx_chem_suffix = re.compile(
+        r"\w+(?:yl|ol|one|ate|ide|ase|ine|azole|idine|azine|oic|al|ene|yne|oxin|idine|amide|tannin|saponin|oside)\b",
+        re.IGNORECASE,
+    )
+    rx_digit_hyphen = re.compile(r"^(?=.*\d)(?=.*-).+$")
+    rx_two_non_alnum = re.compile(r"(?:[^A-Za-z0-9\s].*){2}")
+
+    drug_n_regexes_list = [
+        ("lead_num_sep", rx_lead_num_sep),
+        ("internal_num_sep", rx_internal_num_sep),
+        ("brackets_parens", rx_brackets_parens),
+        ("potential_code", rx_potential_code),
+        ("chem_prefix", rx_chem_prefix),
+        ("chem_suffix", rx_chem_suffix),
+        ("digit_hyphen", rx_digit_hyphen),
+        ("two_non_alnum", rx_two_non_alnum),
+    ]
+    return drug_n_regexes_list
+
+
 class Codemaps:
     # --- constructor, create mapper either from training data, or
     # --- loading codemaps from given file
@@ -51,6 +85,17 @@ class Codemaps:
             "is_drug_fp",
             "is_brand_fp",
             "is_group_fp",
+        ]
+        self.regex_features = [
+            "rx_lead_num_sep",
+            "internal_num_sep",
+            "brackets_parens",
+            "potential_code",
+            "chem_prefix",
+            "chem_suffix",
+            "digit_hyphen",
+            "two_non_alnum",
+            "regex_hits",
         ]
 
         if isinstance(data, Dataset) and maxlen is not None and suflen is not None:
@@ -115,6 +160,7 @@ class Codemaps:
 
     def encode_gazetteer_features(self, data):
         Xg = []
+        comp_regexes = regex_features()
 
         for sentence in data.sentences():
             sentence_features = []
@@ -132,6 +178,17 @@ class Codemaps:
                     1 if word in self.brand_gaz_fp else 0,
                     1 if word in self.group_gaz_fp else 0,
                 ]
+                # =========     REGEXES     =========
+                any_match = False
+                for name, compiled_regex in comp_regexes:
+                    match_result = compiled_regex.search(word)
+                    is_match = bool(match_result)
+                    if is_match:
+                        any_match = True
+                    features.append(1 if is_match else 0)
+
+                features.append(1 if any_match else 0)
+
                 sentence_features.append(features)
 
             Xg.append(sentence_features)

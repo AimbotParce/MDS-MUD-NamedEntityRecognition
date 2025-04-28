@@ -25,7 +25,7 @@ def build_network(codes):
     n_words = codes.get_n_words()
     n_sufs = codes.get_n_sufs()
     n_labels = codes.get_n_labels()
-    num_gazetteer_features = 8
+    num_gazetteer_features = 8 + 9
     max_len = codes.maxlen
 
     inptW = Input(shape=(max_len,))  # word input layer & embeddings
