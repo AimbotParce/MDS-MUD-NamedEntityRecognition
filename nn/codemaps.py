@@ -65,10 +65,10 @@ class Codemaps:
             self.brand_gaz = load_gazetteer(data_path("correct_brand.txt"))
             self.group_gaz = load_gazetteer(data_path("correct_group.txt"))
 
-            self.drug_n_gaz_fp = load_gazetteer(data_path("drug_n_neg.txt"))
-            self.drug_gaz_fp = load_gazetteer(data_path("drug_neg.txt"))
-            self.brand_gaz_fp = load_gazetteer(data_path("brand_neg.txt"))
-            self.group_gaz_fp = load_gazetteer(data_path("group_neg.txt"))
+            self.drug_n_gaz_fp = load_gazetteer(data_path("nn_drug_n_neg.txt"))
+            self.drug_gaz_fp = load_gazetteer(data_path("nn_drug_neg.txt"))
+            self.brand_gaz_fp = load_gazetteer(data_path("nn_brand_neg.txt"))
+            self.group_gaz_fp = load_gazetteer(data_path("nn_group_neg.txt"))
 
         else:
             print("codemaps: Invalid or missing parameters in constructor")
@@ -97,10 +97,10 @@ class Codemaps:
         self.brand_gaz = load_gazetteer(data_path("correct_brand.txt"))
         self.group_gaz = load_gazetteer(data_path("correct_group.txt"))
 
-        self.drug_n_gaz_fp = load_gazetteer(data_path("drug_n_neg.txt"))
-        self.drug_gaz_fp = load_gazetteer(data_path("drug_neg.txt"))
-        self.brand_gaz_fp = load_gazetteer(data_path("brand_neg.txt"))
-        self.group_gaz_fp = load_gazetteer(data_path("group_neg.txt"))
+        self.drug_n_gaz_fp = load_gazetteer(data_path("nn_drug_n_neg.txt"))
+        self.drug_gaz_fp = load_gazetteer(data_path("nn_drug_neg.txt"))
+        self.brand_gaz_fp = load_gazetteer(data_path("nn_brand_neg.txt"))
+        self.group_gaz_fp = load_gazetteer(data_path("nn_group_neg.txt"))
 
         self.word_index = {w: i + 2 for i, w in enumerate(list(words))}
         self.word_index["PAD"] = 0  # Padding
