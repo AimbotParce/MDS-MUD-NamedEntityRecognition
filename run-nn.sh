@@ -9,7 +9,7 @@ fi
 
 # train NN
 echo "Training NN"
-# python3 nn/train.py data/train data/devel models/mymodel.h5
+python3 nn/train.py data/train data/devel models/mymodel.h5
 
 # run model on devel data and compute performance
 echo "Predicting and evaluatig"
