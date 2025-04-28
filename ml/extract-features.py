@@ -9,10 +9,14 @@ from typing import List, Tuple, TypeAlias
 from xml.dom.minidom import parse
 
 import nltk
+import nltk.tag
 from nltk.tokenize import word_tokenize
 
 Token: TypeAlias = Tuple[str, int, int]
 EntitySpan: TypeAlias = Tuple[int, int, str]
+
+nltk.download("averaged_perceptron_tagger_eng")
+nltk.download("universal_tagset")
 
 
 def tokenize(txt: str):
@@ -69,26 +73,58 @@ def extract_features(tokens: List[Token]):
 
     # for each token, generate list of features and add it to the result
     result: List[List[str]] = []
-    for k, token in enumerate(tokens):
-        word, start, end = token  # Unpack the token tuple
+    pos_tags = nltk.tag.pos_tag([t[0] for t in tokens], tagset="universal")  # Get POS tags for the tokens
+    assert len(tokens) == len(pos_tags), "Mismatch between tokens and POS tags length"
+    for k, (word, pos_tag) in enumerate(pos_tags):
         features: List[str] = []
 
         features.append("form=" + word)  # Token form
+        features.append("suf4=" + word[-3:])
         features.append("suf3=" + word[-3:])
+        features.append("suf2=" + word[-2:])
+        features.append("suf1=" + word[-1:])
+        features.append("pre1=" + word[0:1])
+        features.append("pre2=" + word[0:2])
+        features.append("pre3=" + word[0:3])
+        features.append("pre4=" + word[0:4])
+        features.append("capitalized=" + str(word[0].isupper()))  # Is the first letter capitalized?
+        features.append("uppercase=" + str(word.isupper()))  # Is the token all uppercase?
+        features.append("hasdigit=" + str(any(c.isdigit() for c in word)))  # Does the token contain a digit?
+        features.append("haspunct=" + str(any(c in ".,;:!?" for c in word)))  # Does the token contain punctuation?
+        features.append("hashyphen=" + str("-" in word))  # Does the token contain a hyphen?
+        features.append("length=" + str(len(word)))  # Length of the token
+        features.append("form_lower=" + word.lower())  # Lowercase form of the token
+        features.append("pos_tag=" + pos_tag)  # POS tag of the token
 
-        if k > 0:
-            tPrev = tokens[k - 1][0]
-            features.append("formPrev=" + tPrev)  # Token form of previous token
-            features.append("suf3Prev=" + tPrev[-3:])  # Suffix of previous token ???
-        else:
-            features.append("BoS")  # Beginning of Sentence
+        if k == 0:
+            features.append("BoS")
+        if k == len(tokens) - 1:
+            features.append("EoS")
 
-        if k < len(tokens) - 1:
-            tNext = tokens[k + 1][0]
-            features.append("formNext=" + tNext)  # Token form of next token
-            features.append("suf3Next=" + tNext[-3:])  # Suffix of previous token ???
-        else:
-            features.append("EoS")  # End of Sentence
+        capitalization_pattern = ["0"] * 5  # Initialize capitalization pattern
+        uppercase_pattern = ["0"] * 5  # Initialize uppercase pattern
+        hasdigit_pattern = ["0"] * 5  # Initialize digit pattern
+        hashyphen_pattern = ["0"] * 5  # Initialize hyphen pattern
+        for j, i in enumerate(range(-2, 3)):
+            if k + i < 0 or k + i >= len(tokens):
+                continue
+            window_word = tokens[k + i][0]
+            if i != 0:
+                features.append("window" + str(i) + "=" + window_word.lower())  # Context window features
+                features.append("window" + str(i) + "-size=" + str(len(window_word)))  # Size of the context window
+            if window_word[0].isupper():
+                capitalization_pattern[j] = "1"
+            if window_word.isupper():
+                uppercase_pattern[j] = "1"
+            if any(c.isdigit() for c in window_word):
+                hasdigit_pattern[j] = "1"
+            if "-" in window_word:
+                hashyphen_pattern[j] = "1"
+
+        features.append("neigh-capitalization=" + "".join(capitalization_pattern))  # Capitalization pattern
+        features.append("neigh-uppercase=" + "".join(uppercase_pattern))  # Uppercase pattern
+        features.append("neigh-hasdigit=" + "".join(hasdigit_pattern))  # Digit pattern
+        features.append("neigh-hashyphen=" + "".join(hashyphen_pattern))  # Hyphen pattern
 
         result.append(features)
 
