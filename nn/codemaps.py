@@ -1,66 +1,203 @@
-import re
 import string
-from typing import Optional
+import re
+import sys
+from pathlib import Path
 
 import numpy as np
-from dataset import *
-from keras import KerasTensor
-from numpy.typing import NDArray
 from tensorflow.keras.preprocessing.sequence import pad_sequences
+
+from dataset import *
+
+
+def data_path(filename: str) -> Path:
+    """
+    Get the absolute path of a file in the data directory.
+    Args:
+        filename (str): The name of the file.
+    Returns:
+        file_path (Path): The absolute path of the file.
+    """
+    return (Path(__file__).parent.parent / "data" / filename).resolve()
+
+
+def load_gazetteer(filename: Path) -> set[str]:
+    """Reads a file into a set of lowercase strings (one per line)."""
+    print(f"Loading gazetteer: {filename.name}...", file=sys.stderr)
+    try:
+        with open(filename, "r", encoding="utf-8") as f:
+            # Lowercase and strip whitespace for consistent matching
+            items = {line.strip().lower() for line in f if line.strip()}
+        print(f"Loaded {len(items)} unique entries.", file=sys.stderr)
+        return items
+    except FileNotFoundError:
+        print(f"Warning: Gazetteer file not found: {filename}", file=sys.stderr)
+        return set()  # Return empty set if file doesn't exist
+    except Exception as e:
+        print(f"Error loading gazetteer {filename}: {e}", file=sys.stderr)
+        return set()
+
+
+def regex_features():
+    # Potentially good regex for drug_n
+    rx_lead_num_sep = re.compile(r"^\d+([,.]\d+)*[-(\[]")
+    rx_internal_num_sep = re.compile(
+        r"\b[A-Za-z]+\d*[- ,.]\d+\b|\b\d+[- ,.]\d*[A-Za-z]+\b|\b\d+,\d+-\w"
+    )
+    rx_brackets_parens = re.compile(r"[\(\[]\w*[-]?\w*[\)\]]|\w\(\w+\)")
+    rx_potential_code = re.compile(
+        r"\b(?:[A-Z]{2,}\d?|[A-Z]*\d+[A-Z]+|[A-Z]+-\d+|[A-Z]+\d+-|[A-Z\d]+-[A-Z\d]+|\d+-[A-Z]+)(?:-\w+)?\b"
+    )
+    rx_chem_prefix = re.compile(
+        r"\b(des|nor|dehydro|[bh]ydroxy|methyl|ethyl|phenyl|fluoro|chloro|bromo|iodo|acetyl|carbo|amino|oxo|alpha|beta|gamma|delta|omega|cis|trans|para|meta|ortho|[NO]-)\w+",
+        re.IGNORECASE,
+    )
+    rx_chem_suffix = re.compile(
+        r"\w+(?:yl|ol|one|ate|ide|ase|ine|azole|idine|azine|oic|al|ene|yne|oxin|idine|amide|tannin|saponin|oside)\b",
+        re.IGNORECASE,
+    )
+    rx_digit_hyphen = re.compile(r"^(?=.*\d)(?=.*-).+$")
+    rx_two_non_alnum = re.compile(r"(?:[^A-Za-z0-9\s].*){2}")
+
+    drug_n_regexes_list = [
+        ("lead_num_sep", rx_lead_num_sep),
+        ("internal_num_sep", rx_internal_num_sep),
+        ("brackets_parens", rx_brackets_parens),
+        ("potential_code", rx_potential_code),
+        ("chem_prefix", rx_chem_prefix),
+        ("chem_suffix", rx_chem_suffix),
+        ("digit_hyphen", rx_digit_hyphen),
+        ("two_non_alnum", rx_two_non_alnum),
+    ]
+    return drug_n_regexes_list
 
 
 class Codemaps:
     # --- constructor, create mapper either from training data, or
     # --- loading codemaps from given file
-    def __init__(self, data: Dataset | str, maxlen: Optional[int] = None, suflen: Optional[int] = None):
+    def __init__(self, data, maxlen=None, suflen=None):
 
-        self.word_index: dict[str, int]
-        self.suf_index: dict[str, int]
-        self.label_index: dict[str, int]
-        self.maxlen: int
-        self.suflen: int
+        self.gazetteer_features = [
+            "in_drug_n_gaz",
+            "in_drug_gaz",
+            "in_brand_gaz",
+            "in_group_gaz",
+            "is_drug_n_fp",
+            "is_drug_fp",
+            "is_brand_fp",
+            "is_group_fp",
+        ]
+        self.regex_features = [
+            "rx_lead_num_sep",
+            "internal_num_sep",
+            "brackets_parens",
+            "potential_code",
+            "chem_prefix",
+            "chem_suffix",
+            "digit_hyphen",
+            "two_non_alnum",
+            "regex_hits",
+        ]
 
         if isinstance(data, Dataset) and maxlen is not None and suflen is not None:
-            self.__create_indexes(data, maxlen, suflen)
+            self.__create_indexs(data, maxlen, suflen)
 
-        elif isinstance(data, str) and maxlen is None and suflen is None:
+        elif type(data) == str and maxlen is None and suflen is None:
             self.__load(data)
+
+            print("Loading Gazetteers for prediction...")
+            self.drug_n_gaz = load_gazetteer(data_path("correct_drug_n.txt"))
+            self.drug_gaz = load_gazetteer(data_path("correct_drug.txt"))
+            self.brand_gaz = load_gazetteer(data_path("correct_brand.txt"))
+            self.group_gaz = load_gazetteer(data_path("correct_group.txt"))
+
+            self.drug_n_gaz_fp = load_gazetteer(data_path("nn_drug_n_neg.txt"))
+            self.drug_gaz_fp = load_gazetteer(data_path("nn_drug_neg.txt"))
+            self.brand_gaz_fp = load_gazetteer(data_path("nn_brand_neg.txt"))
+            self.group_gaz_fp = load_gazetteer(data_path("nn_group_neg.txt"))
 
         else:
             print("codemaps: Invalid or missing parameters in constructor")
-            exit(1)
+            exit()
 
-    # --------- Create indexes from training data
+    # --------- Create indexs from training data
     # Extract all words and labels in given sentences and
     # create indexes to encode them as numbers when needed
-    def __create_indexes(self, data: Dataset, maxlen: int, suflen: int):
+    def __create_indexs(self, data, maxlen, suflen):
+
         self.maxlen = maxlen
         self.suflen = suflen
-        words = set[str]()
-        lowercase_words = set[str]()
-        suffixes = set[str]()
-        labels = set[str]()
+        words = set([])
+        lc_words = set([])
+        sufs = set([])
+        labels = set([])
 
-        for sentence_tokens in data.sentences():
-            for tagged_token in sentence_tokens:
-                words.add(tagged_token["form"])
-                suffixes.add(tagged_token["lc_form"][-self.suflen :])
-                labels.add(tagged_token["tag"])
+        for s in data.sentences():
+            for t in s:
+                words.add(t["form"])
+                sufs.add(t["lc_form"][-self.suflen :])
+                labels.add(t["tag"])
+
+        self.drug_n_gaz = load_gazetteer(data_path("correct_drug_n.txt"))
+        self.drug_gaz = load_gazetteer(data_path("correct_drug.txt"))
+        self.brand_gaz = load_gazetteer(data_path("correct_brand.txt"))
+        self.group_gaz = load_gazetteer(data_path("correct_group.txt"))
+
+        self.drug_n_gaz_fp = load_gazetteer(data_path("nn_drug_n_neg.txt"))
+        self.drug_gaz_fp = load_gazetteer(data_path("nn_drug_neg.txt"))
+        self.brand_gaz_fp = load_gazetteer(data_path("nn_brand_neg.txt"))
+        self.group_gaz_fp = load_gazetteer(data_path("nn_group_neg.txt"))
 
         self.word_index = {w: i + 2 for i, w in enumerate(list(words))}
         self.word_index["PAD"] = 0  # Padding
         self.word_index["UNK"] = 1  # Unknown words
 
-        self.suf_index = {s: i + 2 for i, s in enumerate(list(suffixes))}
+        self.suf_index = {s: i + 2 for i, s in enumerate(list(sufs))}
         self.suf_index["PAD"] = 0  # Padding
         self.suf_index["UNK"] = 1  # Unknown suffixes
 
-        self.label_index = {t: i + 2 for i, t in enumerate(list(labels))}
+        self.label_index = {t: i + 1 for i, t in enumerate(list(labels))}
         self.label_index["PAD"] = 0  # Padding
-        self.label_index["UNK"] = 1  # Unknown labels
 
-    ## --------- load indexes -----------
-    def __load(self, name: str):
+    def encode_gazetteer_features(self, data):
+        Xg = []
+        comp_regexes = regex_features()
+
+        for sentence in data.sentences():
+            sentence_features = []
+
+            for token in sentence:
+                word = token["form"].lower()
+                features = [
+                    1 if word in self.drug_n_gaz else 0,
+                    1 if word in self.drug_gaz else 0,
+                    1 if word in self.brand_gaz else 0,
+                    1 if word in self.group_gaz else 0,
+                    # ========= False positives =========
+                    1 if word in self.drug_n_gaz_fp else 0,
+                    1 if word in self.drug_gaz_fp else 0,
+                    1 if word in self.brand_gaz_fp else 0,
+                    1 if word in self.group_gaz_fp else 0,
+                ]
+                # =========     REGEXES     =========
+                any_match = False
+                for name, compiled_regex in comp_regexes:
+                    match_result = compiled_regex.search(word)
+                    is_match = bool(match_result)
+                    if is_match:
+                        any_match = True
+                    features.append(1 if is_match else 0)
+
+                features.append(1 if any_match else 0)
+
+                sentence_features.append(features)
+
+            Xg.append(sentence_features)
+
+        Xg = pad_sequences(maxlen=self.maxlen, sequences=Xg, padding="post", value=0)
+        return Xg
+
+    ## --------- load indexs -----------
+    def __load(self, name):
         self.maxlen = 0
         self.suflen = 0
         self.word_index = {}
@@ -82,7 +219,7 @@ class Codemaps:
                     self.label_index[k] = int(i)
 
     ## ---------- Save model and indexs ---------------
-    def save(self, name: str):
+    def save(self, name):
         # save indexes
         with open(name + ".idx", "w") as f:
             print("MAXLEN", self.maxlen, "-", file=f)
@@ -94,46 +231,59 @@ class Codemaps:
             for key in self.suf_index:
                 print("SUF", key, self.suf_index[key], file=f)
 
-    def _encode_word(self, word: str) -> int:
-        """
-        Encode a word into its corresponding index.
-        If the word is not found, return the index for "UNK".
-        """
-        return self.word_index.get(word, self.word_index["UNK"])
-
-    def _encode_suffix(self, suffix: str) -> int:
-        """
-        Encode a suffix into its corresponding index.
-        If the suffix is not found, return the index for "UNK".
-        """
-        return self.suf_index.get(suffix, self.suf_index["UNK"])
-
-    def _encode_label(self, label: str) -> int:
-        """
-        Encode a label into its corresponding index.
-        If the label is not found, return the index for "UNK".
-        """
-        return self.label_index.get(label, self.label_index["UNK"])
-
     ## --------- encode X from given data -----------
-    def encode_words(self, data: Dataset) -> Tuple[NDArray[np.int32], NDArray[np.int32]]:
+    def encode_words(self, data):
         # encode and pad sentence words
-        Xw = [[self._encode_word(token["form"]) for token in sentence] for sentence in data.sentences()]
-        Xw = pad_sequences(maxlen=self.maxlen, sequences=Xw, padding="post", value=self.word_index["PAD"])
+        Xw = [
+            [
+                (
+                    self.word_index[w["form"]]
+                    if w["form"] in self.word_index
+                    else self.word_index["UNK"]
+                )
+                for w in s
+            ]
+            for s in data.sentences()
+        ]
+        Xw = pad_sequences(
+            maxlen=self.maxlen,
+            sequences=Xw,
+            padding="post",
+            value=self.word_index["PAD"],
+        )
         # encode and pad suffixes
         Xs = [
-            [self._encode_suffix(token["lc_form"][-self.suflen :]) for token in sentence]
-            for sentence in data.sentences()
+            [
+                (
+                    self.suf_index[w["lc_form"][-self.suflen :]]
+                    if w["lc_form"][-self.suflen :] in self.suf_index
+                    else self.suf_index["UNK"]
+                )
+                for w in s
+            ]
+            for s in data.sentences()
         ]
-        Xs = pad_sequences(maxlen=self.maxlen, sequences=Xs, padding="post", value=self.suf_index["PAD"])
-        # return encoded sequences
-        return Xw, Xs
+        Xs = pad_sequences(
+            maxlen=self.maxlen,
+            sequences=Xs,
+            padding="post",
+            value=self.suf_index["PAD"],
+        )
+
+        Xg = self.encode_gazetteer_features(data)
+
+        return [Xw, Xs, Xg]
 
     ## --------- encode Y from given data -----------
-    def encode_labels(self, data: Dataset) -> NDArray[np.int32]:
+    def encode_labels(self, data):
         # encode and pad sentence labels
-        Y = [[self._encode_label(token["tag"]) for token in sentence] for sentence in data.sentences()]
-        Y = pad_sequences(maxlen=self.maxlen, sequences=Y, padding="post", value=self.label_index["PAD"])
+        Y = [[self.label_index[w["tag"]] for w in s] for s in data.sentences()]
+        Y = pad_sequences(
+            maxlen=self.maxlen,
+            sequences=Y,
+            padding="post",
+            value=self.label_index["PAD"],
+        )
         return np.array(Y)
 
     ## -------- get word index size ---------
@@ -149,15 +299,19 @@ class Codemaps:
         return len(self.label_index)
 
     ## -------- get index for given word ---------
-    def word2idx(self, w: str):
+    def word2idx(self, w):
         return self.word_index[w]
 
+    ## -------- get index for given suffix --------
+    def suff2idx(self, s):
+        return self.suff_index[s]
+
     ## -------- get index for given label --------
-    def label2idx(self, l: str):
+    def label2idx(self, l):
         return self.label_index[l]
 
     ## -------- get label name for given index --------
-    def idx2label(self, i: int):
+    def idx2label(self, i):
         for l in self.label_index:
             if self.label_index[l] == i:
                 return l
