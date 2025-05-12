@@ -3,6 +3,7 @@ import xml.dom.minidom
 from typing import Dict, List, Tuple, TypeAlias, TypedDict
 
 import nltk
+import nltk.corpus
 import nltk.tokenize
 
 nltk.download("punkt_tab")
@@ -22,13 +23,21 @@ class TaggedTokenDict(TokenDict):
     # O: outside an entity
 
 
+class CustomSpaceTokenizer(nltk.tokenize.SpaceTokenizer):
+    def tokenize(self, text: str) -> List[str]:
+        # Custom tokenization logic
+        return super().tokenize(text.replace("\n", " ").replace("\r", " "))
+
+
 EntityTagSpan: TypeAlias = Tuple[int, int, str]  # (start, end, tag) for an entity
 
 
 class Dataset:
+
     #  Parse all XML files in given dir, and load a list of sentences.
     #  Each sentence is a list of tuples (word, start, end, tag)
     def __init__(self, datadir):
+        self._word_tokenizer = CustomSpaceTokenizer()
         self.data: Dict[str, List[TaggedTokenDict]] = {}
         # process each file in directory
         for f in os.listdir(datadir):
@@ -67,7 +76,7 @@ class Dataset:
         offset = 0  # To optimize the search for the token in the text
         tokens: List[TokenDict] = []
         # word_tokenize splits words, taking into account punctuations, numbers, etc.
-        for token in nltk.tokenize.word_tokenize(text):
+        for token in self._word_tokenizer.tokenize(text):
             # Keep track of the position where each token should appear, and
             # store that information with the token
             offset = text.find(token, offset)
