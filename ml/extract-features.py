@@ -5,14 +5,46 @@ Tokenize sentence, returning tokens and span offsets
 import os
 import sys
 from os import listdir
-from typing import List, Tuple, TypeAlias
+from pathlib import Path
+from typing import Any, List, Tuple, TypeAlias
 from xml.dom.minidom import parse
 
 import nltk
+import nltk.tag
 from nltk.tokenize import word_tokenize
 
 Token: TypeAlias = Tuple[str, int, int]
 EntitySpan: TypeAlias = Tuple[int, int, str]
+
+nltk.download("averaged_perceptron_tagger_eng")
+nltk.download("universal_tagset")
+
+
+def read_list(filename: str) -> List[str]:
+    """
+    Read a list of strings from a file, stripping whitespace and newlines.
+    Args:
+        filename (str): The name of the file to read.
+    Returns:
+        List[str]: A list of strings read from the file.
+    """
+    with open(filename, "r") as f:
+        return list(line.strip() for line in f.readlines())
+
+
+def data_path(filename: str) -> Path:
+    """
+    Get the absolute path of a file in the data directory.
+    Args:
+        filename (str): The name of the file.
+    Returns:
+        file_path (Path): The absolute path of the file.
+    """
+    return (Path(__file__).parent.parent / "data" / filename).resolve()
+
+
+drug_suffixes = read_list(data_path("med-suffixes.txt"))  # Read drug suffixes from a file
+drug_form_words = read_list(data_path("med-form-words.txt"))  # Read drug form words from a file
 
 
 def tokenize(txt: str):
@@ -69,26 +101,81 @@ def extract_features(tokens: List[Token]):
 
     # for each token, generate list of features and add it to the result
     result: List[List[str]] = []
-    for k, token in enumerate(tokens):
-        word, start, end = token  # Unpack the token tuple
+    pos_tags = nltk.tag.pos_tag([t[0] for t in tokens], tagset="universal")  # Get POS tags for the tokens
+    assert len(tokens) == len(pos_tags), "Mismatch between tokens and POS tags length"
+    for k, (word, pos_tag) in enumerate(pos_tags):
         features: List[str] = []
 
-        features.append("form=" + word)  # Token form
-        features.append("suf3=" + word[-3:])
+        features.append("self-suffix-4=" + word[-3:])
+        features.append("self-suffix-3=" + word[-3:])
+        features.append("self-suffix-2=" + word[-2:])
+        features.append("self-suffix-1=" + word[-1:])
+        features.append("self-prefix-1=" + word[0:1])
+        features.append("self-prefix-2=" + word[0:2])
+        features.append("self-prefix-3=" + word[0:3])
+        features.append("self-prefix-4=" + word[0:4])
 
-        if k > 0:
-            tPrev = tokens[k - 1][0]
-            features.append("formPrev=" + tPrev)  # Token form of previous token
-            features.append("suf3Prev=" + tPrev[-3:])  # Suffix of previous token ???
-        else:
-            features.append("BoS")  # Beginning of Sentence
+        for i in range(-2, 3):
+            # Add context window features
+            neighbor_features = {
+                "is-capitalized": "[NA]",  # Is the first letter capitalized?
+                "is-uppercase": "[NA]",  # Is the token all uppercase?
+                "has-digit": "[NA]",  # Does the token contain a digit?
+                "has-punct": "[NA]",  # Does the token contain punctuation?
+                "has-hyphen": "[NA]",  # Does the token contain a hyphen?
+                "has-med-suffix": "[NA]",  # Does the token have a medical suffix?
+                "med-suffix": "[NA]",  # Medical suffix of the token
+                "is-med-form-word": "[NA]",  # Is the token a known medical form word?
+                "length": "[NA]",  # Length of the token
+                "is-long": "[NA]",  # Is the token long?
+                "form": "[NA]",  # Form of the token
+                "form-lower": "[NA]",  # Lowercase form of the token
+                "pos-tag": "[NA]",  # POS tag of the token
+                "is-bos": "[NA]",  # Is the token at the beginning of the sentence?
+                "is-eos": "[NA]",  # Is the token at the end of the sentence?
+            }
+            if not (k + i < 0 or k + i >= len(tokens)):
+                (neighbor_word, neighbor_pos_tag) = pos_tags[k + i]
+                neighbor_features["form-lower"] = neighbor_word.lower()
+                neighbor_features["length"] = str(len(neighbor_word))
+                neighbor_features["is-long"] = str(len(neighbor_word) > 5)
+                neighbor_features["is-capitalized"] = str(neighbor_word[0].isupper())
+                neighbor_features["is-uppercase"] = str(neighbor_word.isupper())
+                neighbor_features["has-digit"] = str(any(c.isdigit() for c in neighbor_word))
+                neighbor_features["has-hyphen"] = str("-" in neighbor_word)
+                for suffix in drug_suffixes:
+                    if neighbor_word.lower().endswith(suffix):
+                        neighbor_features["has-med-suffix"] = "True"
+                        neighbor_features["med-suffix"] = suffix
+                        break
+                else:
+                    neighbor_features["has-med-suffix"] = "False"
+                    neighbor_features["med-suffix"] = "[NA]"
+                for form_word in drug_form_words:
+                    if neighbor_word.lower() == form_word:
+                        neighbor_features["is-med-form-word"] = "True"
+                        break
+                else:
+                    neighbor_features["is-med-form-word"] = "False"
 
-        if k < len(tokens) - 1:
-            tNext = tokens[k + 1][0]
-            features.append("formNext=" + tNext)  # Token form of next token
-            features.append("suf3Next=" + tNext[-3:])  # Suffix of previous token ???
-        else:
-            features.append("EoS")  # End of Sentence
+                if i == 0:
+                    neighbor_features["form"] = neighbor_word
+                    neighbor_features["pos-tag"] = neighbor_pos_tag
+                    neighbor_features["has-punct"] = str(any(c in ".,;:!?" for c in neighbor_word))
+                    neighbor_features["is-bos"] = str(k + i == 0)
+                    neighbor_features["is-eos"] = str(k + i == len(tokens) - 1)
+
+            for key, val in neighbor_features.items():
+                if val == "[NA]":
+                    continue
+                if i == 0:
+                    features.append(f"self-{key}={val}")  # Add self features
+                else:
+                    if i < 0:
+                        ctx_i = "l" + str(-i)
+                    else:
+                        ctx_i = "r" + str(i)
+                    features.append(f"ctx-{ctx_i}-{key}={val}")  # Add context features
 
         result.append(features)
 
