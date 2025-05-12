@@ -4,15 +4,49 @@ Tokenize sentence, returning tokens and span offsets
 """
 import os
 import sys
+from collections import defaultdict
 from os import listdir
-from typing import List, Tuple, TypeAlias
+from pathlib import Path
+from typing import Any, Dict, List, Tuple, TypeAlias
 from xml.dom.minidom import parse
 
 import nltk
+import nltk.tag
+import numpy as np
 from nltk.tokenize import word_tokenize
 
 Token: TypeAlias = Tuple[str, int, int]
 EntitySpan: TypeAlias = Tuple[int, int, str]
+
+nltk.download("averaged_perceptron_tagger_eng")
+nltk.download("universal_tagset")
+
+
+def read_list(filename: str) -> List[str]:
+    """
+    Read a list of strings from a file, stripping whitespace and newlines.
+    Args:
+        filename (str): The name of the file to read.
+    Returns:
+        List[str]: A list of strings read from the file.
+    """
+    with open(filename, "r") as f:
+        return list(line.strip() for line in f.readlines())
+
+
+def data_path(filename: str) -> Path:
+    """
+    Get the absolute path of a file in the data directory.
+    Args:
+        filename (str): The name of the file.
+    Returns:
+        file_path (Path): The absolute path of the file.
+    """
+    return (Path(__file__).parent.parent / "data" / filename).resolve()
+
+
+drug_suffixes = read_list(data_path("med-suffixes.txt"))  # Read drug suffixes from a file
+drug_form_words = read_list(data_path("med-form-words.txt"))  # Read drug form words from a file
 
 
 def tokenize(txt: str):
@@ -69,28 +103,69 @@ def extract_features(tokens: List[Token]):
 
     # for each token, generate list of features and add it to the result
     result: List[List[str]] = []
-    for k, token in enumerate(tokens):
-        word, start, end = token  # Unpack the token tuple
-        features: List[str] = []
+    pos_tags = nltk.tag.pos_tag([t[0] for t in tokens], tagset="universal")  # Get POS tags for the tokens
+    assert len(tokens) == len(pos_tags), "Mismatch between tokens and POS tags length"
+    for k, (word, pos_tag) in enumerate(pos_tags):
+        features: Dict[str, str] = {}
 
-        features.append("form=" + word)  # Token form
-        features.append("suf3=" + word[-3:])
+        features["form"] = word  # Token form
+        features["form-lower"] = word.lower()  # Lowercase form of the token
+        features["is-capitalized"] = str(word[0].isupper())  # Is the first letter capitalized?
+        features["is-uppercase"] = str(word.isupper())  # Is the token all uppercase?
+        features["has-digit"] = str(any(c.isdigit() for c in word))  # Does the token contain a digit?
+        features["has-punct"] = str(any(c in ".,;:!?" for c in word))  # Does the token contain punctuation?
+        features["has-hyphen"] = str("-" in word)  # Does the token contain a hyphen?
+        features["length"] = str(len(word))  # Length of the token
+        features["is-long"] = str(len(word) > 5)  # Is the token long?
+        features["pos-tag"] = pos_tag  # POS tag of the token
+        features["is-bos"] = str(k == 0)  # Is the token at the beginning of the sentence?
+        features["is-eos"] = str(k == len(tokens) - 1)  # Is the token at the end of the sentence?
 
-        if k > 0:
-            tPrev = tokens[k - 1][0]
-            features.append("formPrev=" + tPrev)  # Token form of previous token
-            features.append("suf3Prev=" + tPrev[-3:])  # Suffix of previous token ???
+        for suffix in drug_suffixes:
+            if word.lower().endswith(suffix):
+                features["has-med-suffix"] = "True"
+                features["med-suffix"] = suffix
+                break
         else:
-            features.append("BoS")  # Beginning of Sentence
-
-        if k < len(tokens) - 1:
-            tNext = tokens[k + 1][0]
-            features.append("formNext=" + tNext)  # Token form of next token
-            features.append("suf3Next=" + tNext[-3:])  # Suffix of previous token ???
+            features["has-med-suffix"] = "False"
+            features["med-suffix"] = "[NA]"
+        for form_word in drug_form_words:
+            if word.lower() == form_word:
+                features["is-med-form-word"] = "True"
+                break
         else:
-            features.append("EoS")  # End of Sentence
+            features["is-med-form-word"] = "False"
 
-        result.append(features)
+        # Context window features
+        context_size = 5
+        context_info = defaultdict(lambda: np.zeros(context_size, dtype=np.bool))
+        for j, i in enumerate(range(-(context_size // 2), context_size - (context_size // 2))):
+            if k + i < 0 or k + i >= len(tokens):
+                # If this is outside the sentence
+                continue
+            context_word = tokens[k + i][0]
+            if i != 0:
+                context_word_features: Dict[str, str] = {}
+                context_word_features["form-lower"] = context_word.lower()
+                context_word_features["length"] = str(len(context_word))
+                for key, val in context_word_features.items():
+                    # Adds features like "ctx-l2-length=12", meaning "length of word two to the left is 12"
+                    ctx_i = f"r{i}" if i > 0 else f"l{-i}"
+                    features[f"ctx-{ctx_i}-{key}"] = val
+
+            if context_word[0].isupper():
+                context_info["is-capitalized"][j] = True
+            if context_word.isupper():
+                context_info["is-uppercase"][j] = True
+            if any(c.isdigit() for c in context_word):
+                context_info["has-digit"][j] = True
+            if "-" in context_word:
+                context_info["has-hyphen"][j] = True
+
+        for key, vals in context_info.items():
+            features[f"ctx-{key}"] = "".join("1" if v else "0" for v in vals)
+
+        result.append(list(f"{key}={val}" for key, val in features.items()))
 
     return result
 
