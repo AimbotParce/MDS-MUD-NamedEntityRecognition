@@ -9,10 +9,14 @@ from typing import List, Tuple, TypeAlias
 from xml.dom.minidom import parse
 
 import nltk
+import nltk.tag
 from nltk.tokenize import word_tokenize
 
 Token: TypeAlias = Tuple[str, int, int]
 EntitySpan: TypeAlias = Tuple[int, int, str]
+
+nltk.download("averaged_perceptron_tagger_eng")
+nltk.download("universal_tagset")
 
 
 def tokenize(txt: str):
@@ -69,12 +73,26 @@ def extract_features(tokens: List[Token]):
 
     # for each token, generate list of features and add it to the result
     result: List[List[str]] = []
-    for k, token in enumerate(tokens):
-        word, start, end = token  # Unpack the token tuple
+    pos_tags = nltk.tag.pos_tag([t[0] for t in tokens], tagset="universal")  # Get POS tags for the tokens
+    assert len(tokens) == len(pos_tags), "Mismatch between tokens and POS tags length"
+    for k, (word, pos_tag) in enumerate(pos_tags):
         features: List[str] = []
 
         features.append("form=" + word)  # Token form
         features.append("suf3=" + word[-3:])
+        features.append("suf2=" + word[-2:])
+        features.append("suf1=" + word[-1:])
+        features.append("pre1=" + word[0:1])
+        features.append("pre2=" + word[0:2])
+        features.append("pre3=" + word[0:3])
+        features.append("capitalized=" + str(word[0].isupper()))  # Is the first letter capitalized?
+        features.append("uppercase=" + str(word.isupper()))  # Is the token all uppercase?
+        features.append("hasdigit=" + str(any(c.isdigit() for c in word)))  # Does the token contain a digit?
+        features.append("haspunct=" + str(any(c in ".,;:!?" for c in word)))  # Does the token contain punctuation?
+        features.append("hashyphen=" + str("-" in word))  # Does the token contain a hyphen?
+        features.append("length=" + str(len(word)))  # Length of the token
+        features.append("form_lower=" + word.lower())  # Lowercase form of the token
+        features.append("pos_tag=" + pos_tag)  # POS tag of the token
 
         if k > 0:
             tPrev = tokens[k - 1][0]
