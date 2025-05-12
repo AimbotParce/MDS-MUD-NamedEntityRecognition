@@ -8,11 +8,69 @@ from os import listdir
 from typing import List, Tuple, TypeAlias
 from xml.dom.minidom import parse
 
+import re
+
 import nltk
 from nltk.tokenize import word_tokenize
 
 Token: TypeAlias = Tuple[str, int, int]
 EntitySpan: TypeAlias = Tuple[int, int, str]
+
+drug_suffixes = [
+    "acin",
+    "amine",
+    "arit",
+    "ase",
+    "azepam",
+    "azine",
+    "caine",
+    "cillin",
+    "cycline",
+    "dipine",
+    "dine",
+    "dronate",
+    "fenac",
+    "floxacin",
+    "ide",
+    "lol",
+    "mab",
+    "micin",
+    "olone",
+    "opril",
+    "oxin",
+    "pril",
+    "sartan",
+    "statin",
+    "tidine",
+    "triptan",
+    "vir",
+    "zole",
+]
+
+drug_form_words = [
+    "tablets",
+    "tablet",
+    "capsules",
+    "capsule",
+    "lozenges",
+    "lozenge",
+    "syrup",
+    "injection",
+    "injections",
+    "solution",
+    "cream",
+    "ointment",
+    "gel",
+    "powder",
+    "spray",
+    "patch",
+    "patches",
+    "suppository",
+    "inhaler",
+    "drops",
+    "elixir",
+    "suspension",
+]
 
 
 def tokenize(txt: str):
@@ -29,7 +87,9 @@ def tokenize(txt: str):
 
     offset = 0
     tks: List[Token] = []
-    for t in word_tokenize(txt):  # word_tokenize splits words, taking into account punctuations, numbers, etc.
+    for t in word_tokenize(
+        txt
+    ):  # word_tokenize splits words, taking into account punctuations, numbers, etc.
         # Keep track of the position where each token should appear, and
         # store that information with the token
         offset = txt.find(t, offset)
@@ -76,6 +136,31 @@ def extract_features(tokens: List[Token]):
         features.append("form=" + word)  # Token form
         features.append("suf3=" + word[-3:])
 
+        # ====== New features =======
+
+        is_capitalised = str(
+            bool(re.search(r"[A-Z]", word[0]))
+        )  # Starts with a capital letter
+        has_num = str(bool(re.search(r"[0-9]", word)))
+        is_long = str(bool(len(word) > 5))
+        has_hyphen = str(bool(re.search(r"\-", word)))
+
+        features.append("is_capitalised=" + is_capitalised)
+        features.append("has_num=" + has_num)
+        features.append("is_long=" + is_long)
+        features.append("has_hyphen=" + has_hyphen)
+
+        # *** DOMAIN-SPECIFIC ***
+
+        has_drug_suffix = False
+        for suff in drug_suffixes:
+            if word.lower().endswith(suff):
+                has_drug_suffix = True
+                break
+
+        features.append("has_drug_suffix=" + str(has_drug_suffix))
+
+        # ===== End of features =====
         if k > 0:
             tPrev = tokens[k - 1][0]
             features.append("formPrev=" + tPrev)  # Token form of previous token
@@ -87,6 +172,15 @@ def extract_features(tokens: List[Token]):
             tNext = tokens[k + 1][0]
             features.append("formNext=" + tNext)  # Token form of next token
             features.append("suf3Next=" + tNext[-3:])  # Suffix of previous token ???
+
+            next_word_sus = False
+            for word in drug_form_words:
+                if tNext == word:
+                    next_word_sus = True
+                    break
+
+            features.append("next_word_sus=" + str(next_word_sus))
+
         else:
             features.append("EoS")  # End of Sentence
 
@@ -103,27 +197,43 @@ def main(datadir: str):
     """
     for f in listdir(datadir):  # List all files in the directory
         tree = parse(os.path.join(datadir, f))  # Parse XML file, obtaining a DOM tree
-        sentence_elements = tree.getElementsByTagName("sentence")  # Get all sentences in the file
+        sentence_elements = tree.getElementsByTagName(
+            "sentence"
+        )  # Get all sentences in the file
         for sentence in sentence_elements:
             sentence_id = sentence.attributes["id"].value  # Get sentence id
             spans: List[EntitySpan] = []
             sentence_content = sentence.attributes["text"].value  # Get sentence text
-            entity_elements = sentence.getElementsByTagName("entity")  # Get pre-annotated entities
+            entity_elements = sentence.getElementsByTagName(
+                "entity"
+            )  # Get pre-annotated entities
             for entity in entity_elements:
                 # For discontinuous entities, we only get the first span
                 # (will not work, but there are few of them)
-                (start, end) = entity.attributes["charOffset"].value.split(";")[0].split("-")
+                (start, end) = (
+                    entity.attributes["charOffset"].value.split(";")[0].split("-")
+                )
                 entity_type = entity.attributes["type"].value
                 spans.append((int(start), int(end), entity_type))
 
-            tokens = tokenize(sentence_content)  # Convert the sentence to a list of tokens
+            tokens = tokenize(
+                sentence_content
+            )  # Convert the sentence to a list of tokens
             features = extract_features(tokens)  # Extract sentence features
 
             # Print features in format expected by crfsuite trainer
             for i in range(0, len(tokens)):
                 # See if the token is part of an entity
                 tag = get_tag(tokens[i], spans)
-                print(sentence_id, tokens[i][0], tokens[i][1], tokens[i][2], tag, "\t".join(features[i]), sep="\t")
+                print(
+                    sentence_id,
+                    tokens[i][0],
+                    tokens[i][1],
+                    tokens[i][2],
+                    tag,
+                    "\t".join(features[i]),
+                    sep="\t",
+                )
 
             # blank line to separate sentences
             print()
